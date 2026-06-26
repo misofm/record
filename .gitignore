@@ -1,0 +1,13 @@
+# Move
+move/**/build/
+
+# Node / Bun
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
