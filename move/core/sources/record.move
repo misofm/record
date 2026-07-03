@@ -5,7 +5,7 @@
 ///
 /// Deliberately slim, like `miso_player`: a `Record` is just an id, the release it
 /// is a copy of, and its number. It is an owned object, and everything else —
-/// pressing/edition logic, settings, statistics, vouchers — is added by extensions
+/// pressing logic, settings, statistics, vouchers — is added by extensions
 /// that attach to the record's `UID` via dynamic fields. The release is referenced
 /// by `ID` only, so the core has no dependency on the protocol; extensions that need
 /// the typed `Release` bring that dependency themselves.
@@ -15,6 +15,7 @@
 /// release, and how `number` is assigned) is an extension concern, not the core's.
 module miso_record::record;
 
+use sui::derived_object;
 use sui::event::emit;
 
 //=== Structs ===
@@ -24,6 +25,10 @@ public struct Record has key, store {
     release_id: ID,
     number: u32,
 }
+
+/// Key for deriving a `Record`'s UID off a parent object (e.g. a `Drop`). The
+/// `number` makes each record deterministically addressable from the parent.
+public struct RecordKey(u32) has copy, drop, store;
 
 //=== Events ===
 
@@ -46,6 +51,33 @@ public struct RecordDestroyedEvent has copy, drop {
 /// extension) owns the numbering/authority policy.
 public fun new(release_id: ID, number: u32, ctx: &mut TxContext): Record {
     let record = Record { id: object::new(ctx), release_id, number };
+
+    emit(RecordCreatedEvent {
+        record_id: record.id(),
+        release_id,
+        number,
+        created_by: ctx.sender(),
+    });
+
+    record
+}
+
+/// Mint a record whose UID is *derived* off `parent` (e.g. a `Drop`'s UID) keyed
+/// by `number`. Deterministic and collision-checked: `derived_object::claim`
+/// aborts if `RecordKey(number)` was already claimed off this parent, so a given
+/// number can be minted at most once. The caller (a sale module in this package)
+/// owns the numbering/authority policy.
+public(package) fun new_derived(
+    release_id: ID,
+    number: u32,
+    parent: &mut UID,
+    ctx: &TxContext,
+): Record {
+    let record = Record {
+        id: derived_object::claim(parent, RecordKey(number)),
+        release_id,
+        number,
+    };
 
     emit(RecordCreatedEvent {
         record_id: record.id(),

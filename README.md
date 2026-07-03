@@ -8,8 +8,8 @@ raw-`&mut UID` model as `miso-player` and the miso-protocol.
 public struct Record has key, store { id: UID, release_id: ID, number: u32 }
 ```
 
-That's the whole object. A `Record` is **owned** and **transferable**. Pressing /
-edition logic, settings, statistics, vouchers, SEAL access — none of it lives in the
+That's the whole object. A `Record` is **owned** and **transferable**. Pressing
+logic, settings, statistics, vouchers, SEAL access — none of it lives in the
 struct. Each is an extension package that attaches its own state to the record's
 `UID` as a dynamic field.
 
@@ -28,7 +28,7 @@ struct. Each is an extension package that attaches its own state to the record's
 
 - **Numbering/minting is an extension concern.** `new(release_id, number, ctx)` just
   constructs the struct; *who* may press which release and *how* `number` is assigned
-  (per-release editions, etc.) belongs to a pressing extension, not the core.
+  belongs to a pressing extension, not the core.
 
 ## Layout
 
@@ -52,7 +52,7 @@ cd move/core && sui move test
 |---|---|
 | `miso_record` (core) | ✅ slim struct, builds, 1 test |
 
-Extensions (pressing/editions, settings, statistics, vouchers, SEAL ACL) are the
+Extensions (pressing, settings, statistics, vouchers, SEAL ACL) are the
 next pieces — they'll live under `move/extensions/`. The previous monolithic
 `miso_record` (record + pressing + settings + statistics + vouchers in one package,
 in the `miso` monorepo) is the reference for what to break out.
