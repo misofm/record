@@ -45,6 +45,7 @@
 /// witness — same `Record`, no `miso_record` redeploy.
 module miso_pressing::pressing;
 
+use bps::bps::{Self, BPS};
 use miso::release::{Release, ReleaseAdminCap};
 use miso_record::record::{Self, Record};
 use miso_record::settings::Settings;
@@ -81,6 +82,10 @@ public struct Pressing<phantom Currency> has key {
     edition: u32,
     /// How much a buyer must pay per record.
     price: Price,
+    /// Optional referral commission. When set *and* a buyer names a referrer, this
+    /// fraction of each payment is paid to that referrer out of proceeds (the rest
+    /// goes to the release); `none` = no referral program. Fixed at creation.
+    referral_commission_rate: Option<BPS>,
     /// Records pressed so far; also the most recently pressed record's number.
     /// Uncapped — a pressing never runs out on quantity.
     quantity_sold: u64,
@@ -110,6 +115,7 @@ public struct PressingCreatedEvent<phantom Currency> has copy, drop {
     edition: u32,
     price_type: vector<u8>,
     price_amount: u64,
+    referral_commission_rate: Option<u16>,
     start_timestamp_ms: u64,
     end_timestamp_ms: Option<u64>,
 }
@@ -122,6 +128,18 @@ public struct RecordPressedEvent<phantom Currency> has copy, drop {
     number: u64,
     paid: u64,
     buyer: address,
+}
+
+/// A referral commission was paid out of a purchase to the buyer's named referrer.
+public struct ReferralPaidEvent<phantom Currency> has copy, drop {
+    pressing_id: ID,
+    release_id: ID,
+    /// The record serial this commission was earned on.
+    number: u64,
+    referral: address,
+    buyer: address,
+    /// Commission paid, in `Currency`'s smallest unit.
+    amount: u64,
 }
 
 //=== Errors ===
@@ -177,6 +195,7 @@ public fun new<Currency>(
     release: &Release,
     cap: &ReleaseAdminCap,
     price: Price,
+    referral_commission_rate: Option<u16>,
     edition_hint: u32,
     start_timestamp_ms: u64,
     end_timestamp_ms: Option<u64>,
@@ -184,6 +203,9 @@ public fun new<Currency>(
 ) {
     assert!(cap.release_id() == release.id(), EUnauthorized);
     let release_id = release.id();
+
+    // Validate + wrap the referral rate up front — `bps::new` aborts above 100%.
+    let referral_commission_rate = referral_commission_rate.map!(|v| bps::new(v));
 
     // Editions are gap-free: creating edition n>0 requires n-1 to already exist for
     // this release. `derived_object::claim` below separately rejects a duplicate edition.
@@ -208,6 +230,7 @@ public fun new<Currency>(
         edition: edition_hint,
         price_type: price.type_name(),
         price_amount: price.amount(),
+        referral_commission_rate: referral_commission_rate.map!(|r| r.value()),
         start_timestamp_ms,
         end_timestamp_ms,
     });
@@ -217,6 +240,7 @@ public fun new<Currency>(
         release_id,
         edition: edition_hint,
         price,
+        referral_commission_rate,
         quantity_sold: 0,
         start_timestamp_ms,
         end_timestamp_ms,
@@ -225,15 +249,19 @@ public fun new<Currency>(
 
 /// Press (buy) one record from a live pressing — one within its time window.
 ///
-/// `payment` must satisfy the price (exactly, for `Fixed`; at least, for `Floor`). The
-/// ENTIRE payment is forwarded to the release's address — under `Floor`, anything paid
-/// above the floor is kept (a pay-what-you-want tip), not refunded. The pressed record's
-/// number is the 1-based `quantity_sold` count, its UID is derived off the pressing, and
-/// it records the pressing's `edition`, the `Currency`, and the amount paid. `settings`
-/// must authorize this package's `MintWitness`.
+/// `payment` must satisfy the price (exactly, for `Fixed`; at least, for `Floor`) — under
+/// `Floor`, anything paid above the floor is kept (a pay-what-you-want tip), not refunded.
+/// `referral` optionally names the storefront/fan who drove the sale: when this pressing
+/// sets a `referral_commission_rate` *and* a referrer is given, that fraction of the whole
+/// payment is paid to the referrer and the remainder is forwarded to the release; otherwise
+/// the entire payment goes to the release. The pressed record's number is the 1-based
+/// `quantity_sold` count, its UID is derived off the pressing, and it records the pressing's
+/// `edition`, the `Currency`, and the amount paid. `settings` must authorize this package's
+/// `MintWitness`.
 public fun press<Currency>(
     self: &mut Pressing<Currency>,
     payment: Coin<Currency>,
+    referral: Option<address>,
     settings: &Settings,
     clock: &Clock,
     ctx: &mut TxContext,
@@ -248,15 +276,34 @@ public fun press<Currency>(
         Price::Floor { amount } => assert!(paid >= amount, EInsufficientPayment),
     };
 
-    // Forward the entire payment to the release's address (funds accumulator); the
-    // release / royalty layer redeems + splits it downstream. A free pressing (price 0)
-    // skips the send so we never open a zero-value accumulator slot.
+    self.quantity_sold = self.quantity_sold + 1;
+    let number = self.quantity_sold;
+
+    // Split the payment: an optional referral commission is paid to the buyer's named
+    // referrer (only when this pressing sets a rate *and* a referrer is given), and the
+    // remainder is forwarded to the release's address (funds accumulator) for the release /
+    // royalty layer to redeem + split. A free pressing (price 0) skips the send so we never
+    // open a zero-value accumulator slot.
     if (paid > 0) {
-        balance::send_funds(payment.into_balance(), self.release_id.to_address());
+        let mut proceeds = payment.into_balance();
+        self.referral_commission_rate.do_ref!(|rate| referral.do_ref!(|addr| {
+            let commission = bps::apply(*rate, paid);
+            if (commission > 0) {
+                balance::send_funds(proceeds.split(commission), *addr);
+                emit(ReferralPaidEvent<Currency> {
+                    pressing_id: self.id.to_inner(),
+                    release_id: self.release_id,
+                    number,
+                    referral: *addr,
+                    buyer: ctx.sender(),
+                    amount: commission,
+                });
+            }
+        }));
+        balance::send_funds(proceeds, self.release_id.to_address());
     } else {
         payment.destroy_zero();
     };
-    self.quantity_sold = self.quantity_sold + 1;
 
     let record = record::mint_derived<MintWitness, Currency>(
         MintWitness {},
@@ -264,7 +311,7 @@ public fun press<Currency>(
         &mut self.id,
         self.release_id,
         self.edition,
-        self.quantity_sold,
+        number,
         paid,
         ctx,
     );
@@ -274,7 +321,7 @@ public fun press<Currency>(
         release_id: self.release_id,
         edition: self.edition,
         record_id: record.id(),
-        number: self.quantity_sold,
+        number,
         paid,
         buyer: ctx.sender(),
     });
@@ -302,6 +349,12 @@ public fun quantity_sold<Currency>(self: &Pressing<Currency>): u64 {
 
 public fun price<Currency>(self: &Pressing<Currency>): u64 {
     self.price.amount()
+}
+
+/// The referral commission rate in basis points, or `none` if this pressing runs no
+/// referral program.
+public fun referral_commission_rate<Currency>(self: &Pressing<Currency>): Option<u16> {
+    self.referral_commission_rate.map!(|r| r.value())
 }
 
 /// Whether `press` would be accepted right now: inside the time window.
@@ -360,6 +413,7 @@ public fun new_for_testing<Currency>(
     release_id: ID,
     edition: u32,
     price: Price,
+    referral_commission_rate: Option<BPS>,
     start_timestamp_ms: u64,
     end_timestamp_ms: Option<u64>,
     ctx: &mut TxContext,
@@ -369,6 +423,7 @@ public fun new_for_testing<Currency>(
         release_id,
         edition,
         price,
+        referral_commission_rate,
         quantity_sold: 0,
         start_timestamp_ms,
         end_timestamp_ms,

@@ -7,3 +7,4 @@ authors = ["Miso Labs, Inc. (build@miso.network)"]
 [dependencies]
 miso = { local = "../../../miso-protocol/move" }
 miso_record = { local = "../core" }
+bps = { git = "https://github.com/unconfirmedlabs/bps.git", rev = "d1c07015b98c407e556d014eaa1f4991bd081372" }
