@@ -8,14 +8,14 @@ raw-`&mut UID` model as `miso-player` and the miso-protocol.
 public struct Record has key, store {
     id: UID,
     release_id: ID,
-    edition: u32,               // which pressing run (0 = first pressing)
-    number: u64,                // serial within the pressing
+    edition: u32,               // which edition run (0 = first)
+    number: u64,                // serial within the edition
     purchase_currency: TypeName,
     purchase_price: u64,
 }
 ```
 
-That's the whole object. A `Record` is **owned** and **transferable**. Pressing logic,
+That's the whole object. A `Record` is **owned** and **transferable**. Sale logic,
 statistics, vouchers, SEAL access — none of it lives in the struct. Each is an
 extension package that attaches its own state to the record's `UID` as a dynamic field.
 
@@ -39,13 +39,15 @@ extension package that attaches its own state to the record's `UID` as a dynamic
   only on its paid path, and hands it to `mint`; the check is a runtime `TypeName`
   lookup, never a compile-time dependency on the sale package. **A brand-new sale
   package plugs in with zero redeploy of this package** — an admin just authorizes its
-  witness type. This is why `miso_pressing` is a *separate package*: same `Record`,
-  different shops, different sale mechanics.
+  witness type. This is why the sale lives in its own package
+  ([`miso-drop`](https://github.com/misonetwork/miso-drop), witness
+  `miso_drop::drop::MintWitness`): same `Record`, different shops, different sale
+  mechanics.
 
-- **Records derive off the pressing.** `mint_derived` claims the record's UID off a
-  `parent: &mut UID` (the `Pressing`'s UID) keyed by `RecordKey(number)`, so every copy
-  is deterministically addressable from its pressing and a given number can be pressed
-  at most once. `record::is_derived_from(&record, pressing_id)` verifies that linkage
+- **Records derive off the sale.** `mint_derived` claims the record's UID off a
+  `parent: &mut UID` (e.g. a `Drop`'s UID) keyed by `RecordKey(number)`, so every copy
+  is deterministically addressable from its sale and a given number can be minted
+  at most once. `record::is_derived_from(&record, drop_id)` verifies that linkage
   on-chain from the record alone — no stored parent id needed.
 
 - **Otherwise, authority is possession.** Once a record exists, only the owner can
@@ -56,48 +58,31 @@ extension package that attaches its own state to the record's `UID` as a dynamic
   public fun uid_mut(self: &mut Record): &mut UID
   ```
 
-## `miso_pressing` — the V1 sale
-
-A `Pressing<Currency>` is a shared, **immutable** primary sale for one *edition* of a
-release. It never gates *who* can buy — supply is uncapped and access is open; how rare
-a record becomes is about how its owner engages with it over time, not manufactured
-scarcity at the point of sale.
-
-- **Editions.** Pressing UIDs are derived off a shared `PressingRegistry` keyed by
-  `(release_id, edition)`, giving deterministic addressing and **gap-free** per-release
-  runs: `0, 1, 2, …` (creating edition `n` requires `n-1` to exist; duplicates abort).
-- **Price.** `Fixed` (pay exactly) or `Floor` (pay ≥, overpayment kept as a tip). The
-  whole payment forwards to the release's address; the record stores what was paid.
-- **Window (the only mechanic).** Sells within `[start, end?]`; `end` is optional
-  (`none` = evergreen, always buyable). Liveness is a pure function of the clock — no
-  manual pause. End a limited run with a close set up front; offer more with a new
-  edition.
-
 ## Layout
 
 ```
 move/
-  core/       miso_record   — the slim Record + Settings mint-authority (this package)
-  pressing/   miso_pressing — the V1 primary sale; presses records via its MintWitness
+  sources/record.move     the slim Record
+  sources/settings.move   Settings — the witness-type mint allowlist
+  tests/record_tests.move
 ```
 
-`miso_pressing` depends on `miso_record` (and on `miso` for the release admin cap). A
-second sale mechanic (auction, dutch, giveaway…) would be another package alongside
-`pressing/`, each authorized by its own witness type in `Settings`.
+The V1 sale — the `Drop` — lives in its own repo:
+[`miso-drop`](https://github.com/misonetwork/miso-drop). A second sale mechanic
+(auction, dutch, giveaway…) would be another sibling package, each authorized by its
+own witness type in `Settings`.
 
 ## Build
 
 ```bash
-cd move/core     && sui move test   # miso_record
-cd move/pressing && sui move test   # miso_pressing
+cd move && sui move test
 ```
 
 ## Status
 
 | Package | State |
 |---|---|
-| `miso_record` (core) | ✅ slim struct + `Settings` witness-gated mint, 4 tests |
-| `miso_pressing` | ✅ immutable `Pressing<Currency>`: editions, fixed/floor price, time window, 11 tests |
+| `miso_record` | ✅ slim struct + `Settings` witness-gated mint, 4 tests |
 
 Further extensions (statistics, vouchers, SEAL ACL) attach to a record's `UID` and are
 the next pieces.
