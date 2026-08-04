@@ -6,9 +6,8 @@ module miso_record::record_tests;
 
 use miso_record::record;
 use miso_record::settings;
-use std::type_name;
+use sui::clock;
 use sui::dynamic_field as df;
-use sui::sui::SUI;
 
 /// Stand-in for a sale package's minter witness.
 public struct DemoMinter has drop {}
@@ -27,20 +26,26 @@ fun id(addr: address): ID {
 }
 
 #[test]
-fun authorized_mint_holds_fields_and_is_extensible() {
+fun authorized_mint_derives_off_the_parent_and_is_extensible() {
     let mut ctx = tx_context::new_from_hint(@0xA, 0, 0, 0, 0);
     let release = id(@0xBEEF);
+    let clk = clock_at(1_700_000_000_000, &mut ctx);
 
     let (mut cfg, cap) = settings::new_for_testing(&mut ctx);
     settings::authorize<DemoMinter>(&mut cfg, &cap);
     assert!(settings::is_authorized<DemoMinter>(&cfg));
 
-    let mut r = record::mint<DemoMinter, SUI>(DemoMinter {}, &cfg, release, 2, 7, 100, &mut ctx);
+    let mut parent = object::new(&mut ctx);
+    let mut r = record::mint<DemoMinter>(DemoMinter {}, &cfg, &mut parent, release, 7, &clk, &ctx);
     assert!(record::release_id(&r) == release);
-    assert!(record::edition(&r) == 2);
-    assert!(record::number(&r) == 7);
-    assert!(record::purchase_price(&r) == 100);
-    assert!(record::purchase_currency(&r) == type_name::with_defining_ids<SUI>());
+    // The birth date comes off the clock, never from the minter.
+    assert!(record::created_at_ms(&r) == 1_700_000_000_000);
+
+    // Every record derives off its minting parent: the address is pure math over the
+    // parent and the claim slot, so provenance is verifiable by recomputing it. The
+    // record does not store the slot — the issuer's serial field names it.
+    assert!(record::id(&r) == record::derive_id(parent.to_inner(), 7));
+    assert!(record::id(&r) != record::derive_id(release, 7));
 
     // An extension attaches state through the open uid_mut and reads it back.
     df::add(record::uid_mut(&mut r), DemoKey(), b"pressing");
@@ -48,52 +53,67 @@ fun authorized_mint_holds_fields_and_is_extensible() {
     let _: vector<u8> = df::remove(record::uid_mut(&mut r), DemoKey());
 
     record::destroy(r);
+    parent.delete();
     settings::destroy_for_testing(cfg, cap);
+    clk.destroy_for_testing();
 }
 
 #[test]
-fun derived_mint_is_addressable_from_parent() {
+#[expected_failure] // derived_object::claim aborts: RecordKey(number) is claim-once
+fun a_serial_can_be_minted_at_most_once_per_parent() {
     let mut ctx = tx_context::new_from_hint(@0xA, 0, 0, 0, 0);
-    let release = id(@0xBEEF);
-
+    let clk = clock::create_for_testing(&mut ctx);
     let (mut cfg, cap) = settings::new_for_testing(&mut ctx);
     settings::authorize<DemoMinter>(&mut cfg, &cap);
 
     let mut parent = object::new(&mut ctx);
-    let r = record::mint_derived<DemoMinter, SUI>(DemoMinter {}, &cfg, &mut parent, release, 0, 1, 50, &ctx);
-    assert!(record::edition(&r) == 0);
-    assert!(record::number(&r) == 1);
-    assert!(record::purchase_price(&r) == 50);
-    assert!(record::is_derived_from(&r, parent.to_inner()));
+    let r1 = record::mint<DemoMinter>(DemoMinter {}, &cfg, &mut parent, id(@0xBEEF), 1, &clk, &ctx);
+    let r2 = record::mint<DemoMinter>(DemoMinter {}, &cfg, &mut parent, id(@0xBEEF), 1, &clk, &ctx);
 
-    record::destroy(r);
+    record::destroy(r1);
+    record::destroy(r2);
     parent.delete();
     settings::destroy_for_testing(cfg, cap);
+    clk.destroy_for_testing();
 }
 
 #[test]
 #[expected_failure(abort_code = ENotAuthorized, location = miso_record::record)]
 fun unauthorized_witness_cannot_mint() {
     let mut ctx = tx_context::new_from_hint(@0xA, 0, 0, 0, 0);
+    let clk = clock::create_for_testing(&mut ctx);
     let (cfg, cap) = settings::new_for_testing(&mut ctx);
 
     // Impostor was never authorized — this aborts.
-    let r = record::mint<Impostor, SUI>(Impostor {}, &cfg, id(@0xBEEF), 0, 1, 1, &mut ctx);
+    let mut parent = object::new(&mut ctx);
+    let r = record::mint<Impostor>(Impostor {}, &cfg, &mut parent, id(@0xBEEF), 1, &clk, &ctx);
 
     record::destroy(r);
+    parent.delete();
     settings::destroy_for_testing(cfg, cap);
+    clk.destroy_for_testing();
 }
 
 #[test]
 #[expected_failure(abort_code = ENotAuthorized, location = miso_record::record)]
 fun revoked_witness_cannot_mint() {
     let mut ctx = tx_context::new_from_hint(@0xA, 0, 0, 0, 0);
+    let clk = clock::create_for_testing(&mut ctx);
     let (mut cfg, cap) = settings::new_for_testing(&mut ctx);
     settings::authorize<DemoMinter>(&mut cfg, &cap);
     settings::revoke<DemoMinter>(&mut cfg, &cap);
 
-    let r = record::mint<DemoMinter, SUI>(DemoMinter {}, &cfg, id(@0xBEEF), 0, 1, 1, &mut ctx);
+    let mut parent = object::new(&mut ctx);
+    let r = record::mint<DemoMinter>(DemoMinter {}, &cfg, &mut parent, id(@0xBEEF), 1, &clk, &ctx);
 
     record::destroy(r);
+    parent.delete();
     settings::destroy_for_testing(cfg, cap);
+    clk.destroy_for_testing();
+}
+
+fun clock_at(ms: u64, ctx: &mut TxContext): clock::Clock {
+    let mut c = clock::create_for_testing(ctx);
+    c.set_for_testing(ms);
+    c
 }

@@ -1,5 +1,6 @@
 # Move
 move/**/build/
+extensions/**/build/
 
 # Node / Bun
 node_modules/

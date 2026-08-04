@@ -1,5 +1,14 @@
 # Decouple drop from miso_record (witness-authorized mint)
 
+> **2026-07-28 — superseded in part.** The witness-gated mint design below still stands,
+> but the `Record` struct has since been slimmed to `{ id, release_id, number,
+> created_at_ms }`: `edition` and the purchase fields moved out (purchase terms are now a
+> `Receipt` dynamic field owned by `miso_drop`), minting lost the `Currency` type param
+> and gained `&Clock`, and the fresh-UID `mint` was deleted — the derived path is now the
+> singular `mint` (every record derives off its minting parent; the "retained for
+> airdrops" note below is obsolete). See `miso-pressing/tasks/todo.md` for the redesign
+> record.
+
 Design B: `miso_record` is the base package and owns a `Settings` allowlist of
 authorized minter *witness types*. Drop packages depend on `miso_record`, mint by
 presenting their own witness, and `miso_record` checks the type is authorized.
