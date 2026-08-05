@@ -62,70 +62,31 @@ always "copy 42 *of this pressing*", never a bare 42.
   public fun uid_mut(self: &mut Record): &mut UID
   ```
 
-## Proving access (`miso_record_access`)
+## Events
 
-Gated material — a recording's stems, a mixer session — is opened against a proof,
-not a lookup. `miso_record_access::access` holds the dry-run targets: a verifier
-simulates one with the claimed wallet as sender, and success *is* the authorization.
+The core emits a complete indexing surface:
 
-```move
-entry fun prove_release(record: Record, release: &Release, ctx: &TxContext)
-entry fun prove_recording(record: Record, release: &Release, recording_id: ID, ctx: &TxContext)
-entry fun prove_composition<RecordingShare, CompositionShare>(
-    record: Record,
-    release: &Release,
-    recording: &Recording<RecordingShare, CompositionShare>,
-    composition: &Composition<CompositionShare>,
-    ctx: &TxContext,
-)
-```
+| Event | Indexed facts |
+|---|---|
+| `SettingsCreatedEvent` | settings object, admin capability, initial admin |
+| `MinterAuthorizedEvent` | settings object, admin capability, witness type, actor |
+| `MinterRevokedEvent` | settings object, admin capability, witness type, actor |
+| `RecordCreatedEvent` | record, minting parent, release, claim number, timestamp, witness type, creator |
+| `RecordDestroyedEvent` | record, release, actor |
 
-**The package is named for the credential; each entry is named for the subject.**
-The credential never varies — every proof starts from a `Record`. What varies is
-what is being opened. New subjects join as new entries, not new packages.
+The package can be immutable while the allowlist remains operational: immutability
+removes `UpgradeCap` custody, while `SettingsAdminCap` is retained solely to authorize
+or revoke minter witness types.
 
-| Entry | Gates | Links |
-|---|---|---|
-| `prove_release` | liner notes, cover art pack, a whole-album session | 1–2 |
-| `prove_recording` | a track's stems, its mixer session | 1–3 |
-| `prove_composition` | material on the written work — lyrics, notation | 1–4 |
+## Gating on a record
 
-Four links, and Sui enforces the first one itself:
-
-1. **wallet → record.** The `Record` is taken **by value** and handed back to the
-   sender, so the fullnode's input checker has already verified the sender owns it.
-   By-value is the whole security argument — `&Record` would be a hole, because
-   `Record` has `store` and a shared object is a legal `&` input for *any* sender.
-   By value rejects shared inputs (they cannot be transferred out) and immutable ones
-   (they cannot be passed by value).
-2. **record → release.** `record.release_id() == release.id()`. `prove_release`
-   stops here.
-3. **release → recording.** `release.contains_recording(recording_id)`.
-   `prove_recording` stops here.
-4. **recording → composition.** Not a runtime assert — a recording carries its
-   composition as the `CompositionShare` *phantom type*, never a stored id, so
-   `Recording<_, C>` and `Composition<C>` only type-check together. The 1:1
-   share-type↔object invariant (`share::initialize` consumes the `TreasuryCap`)
-   is what makes that a proof. The `composition` argument is read by no line of
-   the function — it is there so the verifier names the composition it gates **by
-   object id**, rather than lifting the type argument off the recording, which
-   would make the check vacuously true and fail open in silence.
-
-> **Simulate with transaction checks ENABLED** — `dryRun`, or gRPC
-> `SimulateTransaction` with `checks` unset. `devInspect` defaults to
-> `skipChecks: true`, which skips the owner check entirely and would let any sender
-> name any record. Link 1 is the one link this package does not implement, so losing
-> it is silent.
-
-Executed for real each entry is a self-transfer no-op. The link checks are exposed
-as `assert_grants_release` / `assert_grants_recording` / `assert_grants_composition`
-so a later custody shape — the `miso-player` record shelf, a Seal `seal_approve_*`
-policy — reuses them rather than restating the rule.
-
-A recording may sit on several releases and a composition may be recorded many
-times, so `prove_composition` says the listener owns *a* recording of the written
-work, not every recording of it. Where that is too broad, gate with
-`prove_recording`.
+Gated material — a recording's stems, a mixer session, a scan of the lyric sheet — is
+opened against a proof, not a lookup: a verifier simulates a transaction with the
+claimed wallet as sender, and success *is* the authorization. That lives in
+[`miso_record_acl`](https://github.com/misonetwork/miso-record-extensions/tree/main/miso_record_acl),
+a [Seal](https://seal-docs.wal.app) decryption policy whose `seal_approve_*` entries take
+the record **by value** — the whole security argument, since a `Record` has `store` and
+`&Record` would let one shared copy open a release to everyone.
 
 ## Layout
 
@@ -134,30 +95,36 @@ move/
   sources/record.move     the slim Record
   sources/settings.move   Settings — the witness-type mint allowlist
   tests/record_tests.move
-extensions/
-  miso_record_access/     prove a record grants access to a recording
 ```
 
 The V1 sale — the `Pressing` — lives in its own repo:
 [`miso-pressing`](https://github.com/misonetwork/miso-pressing). A second sale mechanic
 (auction, dutch, giveaway…) would be another sibling package, each authorized by its
-own witness type in `Settings`.
+own witness type in `Settings`. Extensions to the record itself live in
+[`miso-record-extensions`](https://github.com/misonetwork/miso-record-extensions).
 
 ## Build
 
 ```bash
 cd move && sui move test
-cd extensions/miso_record_access && sui move test
 ```
 
 ## Status
 
 | Package | State |
 |---|---|
-| `miso_record` | ✅ slim struct + `Settings` witness-gated mint, 4 tests |
-| `miso_record_access` | ✅ release / recording / composition dry-run proofs, 9 tests — not yet published |
+| `miso_record` | ✅ slim struct + `Settings` witness-gated mint, 6 tests |
 
-Further extensions (statistics, vouchers, SEAL ACL) attach to a record's `UID` and are
-the next pieces.
+### Testnet deployment
+
+- Immutable package: `0x2f0e3cf7257f7ba6ee1109c741f0ccc39f44c2da610052d165e7b514c1149fd2`
+- Shared `Settings`: `0xbc8468ea6fae4a1a0ba8f0dd2554fa75d2d3e1bff7537f866ad7b4b2f8d96e86`
+- `SettingsAdminCap`: `0xfe6996468cd9a91c833d753df218cd311b3a8fa58c9085aac5104dcdca964c5a`
+- Publish transaction: `9NkkYZk6FSpVACAvP6iB7g7nqv4d27p6T3coyKFSAwg`
+
+Further extensions (statistics, vouchers) attach to a record's `UID` and are the next
+pieces. They land in
+[`miso-record-extensions`](https://github.com/misonetwork/miso-record-extensions),
+alongside `miso_record_acl`.
 
 License: Apache-2.0
