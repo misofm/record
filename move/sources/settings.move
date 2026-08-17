@@ -40,42 +40,84 @@ public struct SettingsAdminCap has key, store {
 
 //=== Events ===
 
+public struct SettingsCreatedEvent has copy, drop {
+    settings_id: ID,
+    admin_cap_id: ID,
+    admin: address,
+}
+
 public struct MinterAuthorizedEvent has copy, drop {
+    settings_id: ID,
+    admin_cap_id: ID,
     minter: TypeName,
+    authorized_by: address,
 }
 
 public struct MinterRevokedEvent has copy, drop {
+    settings_id: ID,
+    admin_cap_id: ID,
     minter: TypeName,
+    revoked_by: address,
 }
 
 //=== Init ===
 
 fun init(ctx: &mut TxContext) {
-    transfer::share_object(Settings {
+    let (settings, admin_cap) = new(ctx);
+    transfer::share_object(settings);
+    transfer::transfer(admin_cap, ctx.sender());
+}
+
+fun new(ctx: &mut TxContext): (Settings, SettingsAdminCap) {
+    let settings = Settings {
         id: object::new(ctx),
         minters: vec_set::empty(),
+    };
+    let admin_cap = SettingsAdminCap { id: object::new(ctx) };
+    emit(SettingsCreatedEvent {
+        settings_id: object::id(&settings),
+        admin_cap_id: object::id(&admin_cap),
+        admin: ctx.sender(),
     });
-    transfer::transfer(SettingsAdminCap { id: object::new(ctx) }, ctx.sender());
+    (settings, admin_cap)
 }
 
 //=== Admin Functions ===
 
 /// Authorize the witness type `W` to mint records. Idempotent: authorizing an
 /// already-authorized type is a no-op rather than an abort.
-public fun authorize<W>(self: &mut Settings, _: &SettingsAdminCap) {
+public fun authorize<W>(
+    self: &mut Settings,
+    admin_cap: &SettingsAdminCap,
+    ctx: &TxContext,
+) {
     let minter = type_name::with_defining_ids<W>();
     if (!self.minters.contains(&minter)) {
         self.minters.insert(minter);
-        emit(MinterAuthorizedEvent { minter });
+        emit(MinterAuthorizedEvent {
+            settings_id: object::id(self),
+            admin_cap_id: object::id(admin_cap),
+            minter,
+            authorized_by: ctx.sender(),
+        });
     };
 }
 
 /// Revoke the witness type `W`. Idempotent: revoking an unauthorized type is a no-op.
-public fun revoke<W>(self: &mut Settings, _: &SettingsAdminCap) {
+public fun revoke<W>(
+    self: &mut Settings,
+    admin_cap: &SettingsAdminCap,
+    ctx: &TxContext,
+) {
     let minter = type_name::with_defining_ids<W>();
     if (self.minters.contains(&minter)) {
         self.minters.remove(&minter);
-        emit(MinterRevokedEvent { minter });
+        emit(MinterRevokedEvent {
+            settings_id: object::id(self),
+            admin_cap_id: object::id(admin_cap),
+            minter,
+            revoked_by: ctx.sender(),
+        });
     };
 }
 
@@ -102,10 +144,7 @@ public fun init_for_testing(ctx: &mut TxContext) {
 /// want to run `init` / take from a scenario.
 #[test_only]
 public fun new_for_testing(ctx: &mut TxContext): (Settings, SettingsAdminCap) {
-    (
-        Settings { id: object::new(ctx), minters: vec_set::empty() },
-        SettingsAdminCap { id: object::new(ctx) },
-    )
+    new(ctx)
 }
 
 #[test_only]
@@ -114,4 +153,26 @@ public fun destroy_for_testing(self: Settings, cap: SettingsAdminCap) {
     id.delete();
     let SettingsAdminCap { id } = cap;
     id.delete();
+}
+
+#[test_only]
+public fun settings_created_event_fields(event: SettingsCreatedEvent): (ID, ID, address) {
+    let SettingsCreatedEvent { settings_id, admin_cap_id, admin } = event;
+    (settings_id, admin_cap_id, admin)
+}
+
+#[test_only]
+public fun minter_authorized_event_fields(
+    event: MinterAuthorizedEvent,
+): (ID, ID, TypeName, address) {
+    let MinterAuthorizedEvent { settings_id, admin_cap_id, minter, authorized_by } = event;
+    (settings_id, admin_cap_id, minter, authorized_by)
+}
+
+#[test_only]
+public fun minter_revoked_event_fields(
+    event: MinterRevokedEvent,
+): (ID, ID, TypeName, address) {
+    let MinterRevokedEvent { settings_id, admin_cap_id, minter, revoked_by } = event;
+    (settings_id, admin_cap_id, minter, revoked_by)
 }

@@ -34,6 +34,7 @@
 module miso_record::record;
 
 use miso_record::settings::Settings;
+use std::type_name::{Self, TypeName};
 use sui::clock::Clock;
 use sui::derived_object;
 use sui::event::emit;
@@ -56,17 +57,22 @@ public struct RecordKey(u64) has copy, drop, store;
 
 public struct RecordCreatedEvent has copy, drop {
     record_id: ID,
+    /// The object whose derived-claim namespace issued this record.
+    parent_id: ID,
     release_id: ID,
     /// The derived-claim slot the record was minted at. Context for indexers — the
     /// struct itself does not carry it.
     number: u64,
     created_at_ms: u64,
+    /// The authorized witness type used to mint this record.
+    minter: TypeName,
     created_by: address,
 }
 
 public struct RecordDestroyedEvent has copy, drop {
     record_id: ID,
     release_id: ID,
+    destroyed_by: address,
 }
 
 //=== Errors ===
@@ -99,6 +105,7 @@ public fun mint<W: drop>(
     ctx: &TxContext,
 ): Record {
     assert!(settings.is_authorized<W>(), ENotAuthorized);
+    let parent_id = parent.to_inner();
     let record = Record {
         id: derived_object::claim(parent, RecordKey(number)),
         release_id,
@@ -106,9 +113,11 @@ public fun mint<W: drop>(
     };
     emit(RecordCreatedEvent {
         record_id: record.id(),
+        parent_id,
         release_id: record.release_id,
         number,
         created_at_ms: record.created_at_ms,
+        minter: type_name::with_defining_ids<W>(),
         created_by: ctx.sender(),
     });
     record
@@ -116,11 +125,11 @@ public fun mint<W: drop>(
 
 /// Destroy a record. The caller is responsible for detaching any extensions first;
 /// dynamic fields left attached become unreachable.
-public fun destroy(self: Record) {
+public fun destroy(self: Record, ctx: &TxContext) {
     let record_id = self.id();
     let Record { id, release_id, .. } = self;
     id.delete();
-    emit(RecordDestroyedEvent { record_id, release_id });
+    emit(RecordDestroyedEvent { record_id, release_id, destroyed_by: ctx.sender() });
 }
 
 //=== Extension access (possession is authority) ===
@@ -157,4 +166,28 @@ public fun created_at_ms(self: &Record): u64 {
 /// says which number to check.)
 public fun derive_id(parent: ID, number: u64): ID {
     derived_object::derive_address(parent, RecordKey(number)).to_id()
+}
+
+//=== Test Helpers ===
+
+#[test_only]
+public fun record_created_event_fields(
+    event: RecordCreatedEvent,
+): (ID, ID, ID, u64, u64, TypeName, address) {
+    let RecordCreatedEvent {
+        record_id,
+        parent_id,
+        release_id,
+        number,
+        created_at_ms,
+        minter,
+        created_by,
+    } = event;
+    (record_id, parent_id, release_id, number, created_at_ms, minter, created_by)
+}
+
+#[test_only]
+public fun record_destroyed_event_fields(event: RecordDestroyedEvent): (ID, ID, address) {
+    let RecordDestroyedEvent { record_id, release_id, destroyed_by } = event;
+    (record_id, release_id, destroyed_by)
 }
