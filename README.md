@@ -96,6 +96,7 @@ cd move && sui move test
 | `miso_record` | ✅ typed certificate, registry-free core, 6 tests, 100% coverage |
 
 This layout is incompatible with the previous published V1 package and requires a
-fresh package publication.
+fresh package publication. The legacy `Published.toml` has been removed intentionally;
+a new one should be committed only after that fresh publication.
 
 License: Apache-2.0
