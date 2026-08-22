@@ -1,25 +1,21 @@
 # miso-record
 
-The Miso record — an owned, ownable copy of a release, on Sui. A deliberately slim
-core that gains all its functionality from extensions — the same slim-core +
-raw-`&mut UID` model as `miso-player` and the miso-protocol.
+The Miso record — an owned, transferable copy of a release on Sui. The core fixes
+only the release and an issuer-defined certificate at birth; extensions can attach
+contextual state through the record's UID.
 
 ```move
-public struct Record has key, store {
+public struct Record<Certificate: drop + store> has key, store {
     id: UID,
     release_id: ID,
-    created_at_ms: u64,   // stamped off the Clock at mint — never supplied by the minter
+    certificate: Certificate,
 }
 ```
 
-That's the whole object — only what is fixed at birth, true forever, and meaningful
-without a namespace. A `Record` is **owned** and **transferable**. Serial numbers,
-sale terms, statistics, playtime, vouchers, SEAL access — none of it lives in the
-struct. Each is an extension package that attaches its own state to the record's
-`UID` as a dynamic field: the serial certificate and purchase receipt are
-`miso_pressing`'s, because a serial is only meaningful inside the sequence that issued
-it — two sale packages for the same release each count from 1, so "copy 42" is
-always "copy 42 *of this pressing*", never a bare 42.
+The concrete certificate type identifies the mint path, while its value carries that
+path's immutable facts. For example, `miso_pressing::certificate::Certificate` stores
+the pressing, number, payment, and timestamp. It is embedded—not a detachable dynamic
+field.
 
 ## Design
 
@@ -27,30 +23,23 @@ always "copy 42 *of this pressing*", never a bare 42.
   so it has **no dependency on the protocol**. Extensions that need the typed release
   bring that dependency themselves.
 
-- **Minting is authorized by type; sale mechanics live in their own packages.** A
-  record only comes into being through `record::mint`, which requires a *witness*
-  whose **type** is on the `Settings` allowlist:
+- **Trust is expressed by the exact record type.** `record::new` embeds a certificate
+  value and returns its specialization:
 
   ```move
-  public fun mint<W: drop>(_w: W, settings: &Settings, parent: &mut UID, release_id: ID, number: u64, clock: &Clock, ctx): Record
+  public fun new<C: drop + store>(parent: &mut UID, certificate: C, release_id: ID, number: u64): Record<C>
   ```
 
-  `Settings` (shared) holds a `VecSet<TypeName>` of authorized minter witnesses,
-  managed by a `SettingsAdminCap`. A sale package defines its own witness, mints it
-  only on its paid path, and hands it to `mint`; the check is a runtime `TypeName`
-  lookup, never a compile-time dependency on the sale package. **A brand-new sale
-  package plugs in with zero redeploy of this package** — an admin just authorizes its
-  witness type. This is why the sale lives in its own package
-  ([`miso-pressing`](https://github.com/misonetwork/miso-pressing), package `miso_pressing`,
-  witness `miso_pressing::pressing::MintWitness`): same `Record`, different shops,
-  different sale mechanics.
+  Anyone may define a certificate type, but consumers choose which exact `Record<C>`
+  types they trust. A trusted certificate module restricts construction and omits
+  `copy`, preventing outsiders from minting or duplicating that specialization.
 
-- **Every record derives off its minting context.** `mint` claims the record's UID off
+- **Every record derives off its minting context.** `new` claims the record's UID off
   a `parent: &mut UID` (e.g. a `Pressing`'s UID) keyed by `RecordKey(number)`, so every
   copy is deterministically addressable from its parent and a claim slot can be minted
   at most once per parent. The record does not *store* the number — the core keeps
-  serials as pure addressing (`derive_id(parent, number)` recomputes and thereby
-  verifies the linkage); the readable serial is the issuing package's dynamic field.
+  numbers as pure addressing (`derive_address(parent, number)` precomputes the
+  address); the readable meaning of a number belongs to the certificate.
   There is deliberately no fresh-UID mint: a gifting or airdrop package derives off an
   object of its own.
 
@@ -58,25 +47,19 @@ always "copy 42 *of this pressing*", never a bare 42.
   produce a `&mut Record`, so `uid_mut` is fully open — no capability, no allowlist:
 
   ```move
-  public fun uid(self: &Record): &UID
-  public fun uid_mut(self: &mut Record): &mut UID
+  public fun uid<C: drop + store>(self: &Record<C>): &UID
+  public fun uid_mut<C: drop + store>(self: &mut Record<C>): &mut UID
   ```
 
 ## Events
 
-The core emits a complete indexing surface:
+Creation and destruction events are phantom-typed by certificate, so indexers can
+filter the exact trusted record specialization.
 
 | Event | Indexed facts |
 |---|---|
-| `SettingsCreatedEvent` | settings object, admin capability, initial admin |
-| `MinterAuthorizedEvent` | settings object, admin capability, witness type, actor |
-| `MinterRevokedEvent` | settings object, admin capability, witness type, actor |
-| `RecordCreatedEvent` | record, minting parent, release, claim number, timestamp, witness type, creator |
-| `RecordDestroyedEvent` | record, release, actor |
-
-The package can be immutable while the allowlist remains operational: immutability
-removes `UpgradeCap` custody, while `SettingsAdminCap` is retained solely to authorize
-or revoke minter witness types.
+| `RecordCreatedEvent<Certificate>` | record, minting parent, release, claim number |
+| `RecordDestroyedEvent<Certificate>` | record, release |
 
 ## Gating on a record
 
@@ -93,15 +76,12 @@ the record **by value** — the whole security argument, since a `Record` has `s
 ```
 move/
   sources/record.move     the slim Record
-  sources/settings.move   Settings — the witness-type mint allowlist
   tests/record_tests.move
 ```
 
-The V1 sale — the `Pressing` — lives in its own repo:
-[`miso-pressing`](https://github.com/misonetwork/miso-pressing). A second sale mechanic
-(auction, dutch, giveaway…) would be another sibling package, each authorized by its
-own witness type in `Settings`. Extensions to the record itself live in
-[`miso-record-extensions`](https://github.com/misonetwork/miso-record-extensions).
+The `Pressing` lives in the sibling `miso_pressing` package and defines its own
+certificate. Other mint paths define other certificate types. Extensions to the
+record itself live under `record-extensions`.
 
 ## Build
 
@@ -113,18 +93,9 @@ cd move && sui move test
 
 | Package | State |
 |---|---|
-| `miso_record` | ✅ slim struct + `Settings` witness-gated mint, 6 tests |
+| `miso_record` | ✅ typed certificate, registry-free core, 6 tests, 100% coverage |
 
-### Testnet deployment
-
-- Immutable package: `0x2f0e3cf7257f7ba6ee1109c741f0ccc39f44c2da610052d165e7b514c1149fd2`
-- Shared `Settings`: `0xbc8468ea6fae4a1a0ba8f0dd2554fa75d2d3e1bff7537f866ad7b4b2f8d96e86`
-- `SettingsAdminCap`: `0xfe6996468cd9a91c833d753df218cd311b3a8fa58c9085aac5104dcdca964c5a`
-- Publish transaction: `9NkkYZk6FSpVACAvP6iB7g7nqv4d27p6T3coyKFSAwg`
-
-Further extensions (statistics, vouchers) attach to a record's `UID` and are the next
-pieces. They land in
-[`miso-record-extensions`](https://github.com/misonetwork/miso-record-extensions),
-alongside `miso_record_acl`.
+This layout is incompatible with the previous published V1 package and requires a
+fresh package publication.
 
 License: Apache-2.0

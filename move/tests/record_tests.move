@@ -4,193 +4,169 @@
 #[test_only]
 module miso_record::record_tests;
 
-use miso_record::record;
-use miso_record::settings;
-use std::type_name;
-use sui::clock;
+use miso_record::record::{Self, Record};
+use std::unit_test::assert_eq;
+use sui::derived_object;
 use sui::dynamic_field as df;
 use sui::event;
-use sui::test_scenario;
+use sui::test_scenario as ts;
 
-/// Stand-in for a sale package's minter witness.
-public struct DemoMinter has drop {}
+/// Stand-in for a sale package's package-private certificate.
+public struct DemoCertificate(u64) has drop, store;
 
-/// A witness that is never authorized.
-public struct Impostor has drop {}
+/// A separate issuer's certificate type.
+public struct Impostor has drop, store {}
 
 /// Stand-in for an extension's package-private dynamic-field key.
 public struct DemoKey() has copy, drop, store;
-
-/// Mirror of `record::ENotAuthorized` (module-private constants aren't importable).
-const ENotAuthorized: u64 = 0;
 
 fun id(addr: address): ID {
     object::id_from_address(addr)
 }
 
 #[test]
-fun authorized_mint_derives_off_the_parent_and_is_extensible() {
+fun new_embeds_the_certificate_and_derives_off_the_parent() {
     let mut ctx = tx_context::new_from_hint(@0xA, 0, 0, 0, 0);
     let release = id(@0xBEEF);
-    let clk = clock_at(1_700_000_000_000, &mut ctx);
-
-    let (mut cfg, cap) = settings::new_for_testing(&mut ctx);
-    settings::authorize<DemoMinter>(&mut cfg, &cap, &ctx);
-    assert!(settings::is_authorized<DemoMinter>(&cfg));
-
     let mut parent = object::new(&mut ctx);
     let parent_id = parent.to_inner();
-    let mut r = record::mint<DemoMinter>(DemoMinter {}, &cfg, &mut parent, release, 7, &clk, &ctx);
-    assert!(record::release_id(&r) == release);
-    // The birth date comes off the clock, never from the minter.
-    assert!(record::created_at_ms(&r) == 1_700_000_000_000);
+    let mut r = record::new(&mut parent, DemoCertificate(42), release, 7);
+    assert_eq!(record::release_id(&r), release);
+    assert_eq!(record::certificate(&r).0, 42);
+    assert_eq!(record::uid(&r).to_inner(), object::id(&r));
 
     // Every record derives off its minting parent: the address is pure math over the
     // parent and the claim slot, so provenance is verifiable by recomputing it. The
     // record does not store the slot — the issuer's serial field names it.
-    assert!(record::id(&r) == record::derive_id(parent.to_inner(), 7));
-    assert!(record::id(&r) != record::derive_id(release, 7));
+    assert_eq!(object::id(&r), record::derive_address(parent.to_inner(), 7).to_id());
+    assert!(object::id(&r) != record::derive_address(release, 7).to_id());
 
-    let mut created_events = event::events_by_type<record::RecordCreatedEvent>();
-    assert!(created_events.length() == 1);
-    let (record_id, event_parent_id, event_release_id, number, created_at_ms, minter, created_by) =
+    let mut created_events = event::events_by_type<record::RecordCreatedEvent<DemoCertificate>>();
+    assert_eq!(created_events.length(), 1);
+    let (record_id, event_parent_id, event_release_id, number) =
         record::record_created_event_fields(created_events.pop_back());
-    assert!(record_id == record::id(&r));
-    assert!(event_parent_id == parent_id);
-    assert!(event_release_id == release);
-    assert!(number == 7);
-    assert!(created_at_ms == 1_700_000_000_000);
-    assert!(minter == type_name::with_defining_ids<DemoMinter>());
-    assert!(created_by == @0xA);
+    assert_eq!(record_id, object::id(&r));
+    assert_eq!(event_parent_id, parent_id);
+    assert_eq!(event_release_id, release);
+    assert_eq!(number, 7);
+    let _: &DemoCertificate = record::certificate(&r);
 
     // An extension attaches state through the open uid_mut and reads it back.
     df::add(record::uid_mut(&mut r), DemoKey(), b"pressing");
     assert!(df::exists(record::uid(&r), DemoKey()));
     let _: vector<u8> = df::remove(record::uid_mut(&mut r), DemoKey());
 
-    let destroyed_record_id = record::id(&r);
-    record::destroy(r, &ctx);
-    let mut destroyed_events = event::events_by_type<record::RecordDestroyedEvent>();
-    assert!(destroyed_events.length() == 1);
-    let (record_id, event_release_id, destroyed_by) =
+    let destroyed_record_id = object::id(&r);
+    record::destroy(r);
+    let mut destroyed_events =
+        event::events_by_type<record::RecordDestroyedEvent<DemoCertificate>>();
+    assert_eq!(destroyed_events.length(), 1);
+    let (record_id, event_release_id) =
         record::record_destroyed_event_fields(destroyed_events.pop_back());
-    assert!(record_id == destroyed_record_id);
-    assert!(event_release_id == release);
-    assert!(destroyed_by == @0xA);
+    assert_eq!(record_id, destroyed_record_id);
+    assert_eq!(event_release_id, release);
     parent.delete();
-    settings::destroy_for_testing(cfg, cap);
-    clk.destroy_for_testing();
 }
 
-#[test]
-#[expected_failure] // derived_object::claim aborts: RecordKey(number) is claim-once
-fun a_serial_can_be_minted_at_most_once_per_parent() {
+#[test, expected_failure(abort_code = derived_object::EObjectAlreadyExists)]
+fun a_number_can_be_minted_at_most_once_per_parent_across_certificate_types() {
     let mut ctx = tx_context::new_from_hint(@0xA, 0, 0, 0, 0);
-    let clk = clock::create_for_testing(&mut ctx);
-    let (mut cfg, cap) = settings::new_for_testing(&mut ctx);
-    settings::authorize<DemoMinter>(&mut cfg, &cap, &ctx);
-
     let mut parent = object::new(&mut ctx);
-    let r1 = record::mint<DemoMinter>(DemoMinter {}, &cfg, &mut parent, id(@0xBEEF), 1, &clk, &ctx);
-    let r2 = record::mint<DemoMinter>(DemoMinter {}, &cfg, &mut parent, id(@0xBEEF), 1, &clk, &ctx);
+    let r1 = record::new(&mut parent, DemoCertificate(1), id(@0xBEEF), 1);
+    let r2 = record::new(&mut parent, Impostor {}, id(@0xBEEF), 1);
 
-    record::destroy(r1, &ctx);
-    record::destroy(r2, &ctx);
+    // Statically required resource cleanup; unreachable after the expected abort.
+    record::destroy(r1);
+    record::destroy(r2);
     parent.delete();
-    settings::destroy_for_testing(cfg, cap);
-    clk.destroy_for_testing();
 }
 
 #[test]
-#[expected_failure(abort_code = ENotAuthorized, location = miso_record::record)]
-fun unauthorized_witness_cannot_mint() {
+fun certificate_types_have_isolated_event_streams() {
     let mut ctx = tx_context::new_from_hint(@0xA, 0, 0, 0, 0);
-    let clk = clock::create_for_testing(&mut ctx);
-    let (cfg, cap) = settings::new_for_testing(&mut ctx);
-
-    // Impostor was never authorized — this aborts.
     let mut parent = object::new(&mut ctx);
-    let r = record::mint<Impostor>(Impostor {}, &cfg, &mut parent, id(@0xBEEF), 1, &clk, &ctx);
+    let demo = record::new(&mut parent, DemoCertificate(10), id(@0xA11CE), 1);
+    let other = record::new(&mut parent, Impostor {}, id(@0xB0B), 2);
 
-    record::destroy(r, &ctx);
+    let demo_created = event::events_by_type<record::RecordCreatedEvent<DemoCertificate>>();
+    let other_created = event::events_by_type<record::RecordCreatedEvent<Impostor>>();
+    assert_eq!(demo_created.length(), 1);
+    assert_eq!(other_created.length(), 1);
+
+    record::destroy(demo);
+    record::destroy(other);
+
+    let demo_destroyed = event::events_by_type<record::RecordDestroyedEvent<DemoCertificate>>();
+    let other_destroyed = event::events_by_type<record::RecordDestroyedEvent<Impostor>>();
+    assert_eq!(demo_destroyed.length(), 1);
+    assert_eq!(other_destroyed.length(), 1);
     parent.delete();
-    settings::destroy_for_testing(cfg, cap);
-    clk.destroy_for_testing();
 }
 
 #[test]
-#[expected_failure(abort_code = ENotAuthorized, location = miso_record::record)]
-fun revoked_witness_cannot_mint() {
-    let mut ctx = tx_context::new_from_hint(@0xA, 0, 0, 0, 0);
-    let clk = clock::create_for_testing(&mut ctx);
-    let (mut cfg, cap) = settings::new_for_testing(&mut ctx);
-    settings::authorize<DemoMinter>(&mut cfg, &cap, &ctx);
-    settings::revoke<DemoMinter>(&mut cfg, &cap, &ctx);
+fun slots_are_unique_per_parent_not_globally() {
+    let mut ctx = tx_context::dummy();
+    let mut first_parent = object::new(&mut ctx);
+    let mut second_parent = object::new(&mut ctx);
+    let first_parent_id = first_parent.to_inner();
+    let second_parent_id = second_parent.to_inner();
+    let expected_first = record::derive_address(first_parent_id, 1).to_id();
+    let expected_second = record::derive_address(second_parent_id, 1).to_id();
 
+    let first = record::new(&mut first_parent, DemoCertificate(1), id(@0xCAFE), 1);
+    let second = record::new(&mut second_parent, DemoCertificate(1), id(@0xCAFE), 1);
+
+    assert_eq!(object::id(&first), expected_first);
+    assert_eq!(object::id(&second), expected_second);
+    assert!(object::id(&first) != object::id(&second));
+
+    record::destroy(first);
+    record::destroy(second);
+    first_parent.delete();
+    second_parent.delete();
+}
+
+#[test]
+fun different_slots_on_one_parent_are_distinct_and_precomputable() {
+    let mut ctx = tx_context::dummy();
     let mut parent = object::new(&mut ctx);
-    let r = record::mint<DemoMinter>(DemoMinter {}, &cfg, &mut parent, id(@0xBEEF), 1, &clk, &ctx);
+    let parent_id = parent.to_inner();
+    let expected_first = record::derive_address(parent_id, 1).to_id();
+    let expected_second = record::derive_address(parent_id, 2).to_id();
 
-    record::destroy(r, &ctx);
+    let first = record::new(&mut parent, DemoCertificate(1), id(@0xCAFE), 1);
+    let second = record::new(&mut parent, DemoCertificate(2), id(@0xCAFE), 2);
+
+    assert_eq!(object::id(&first), expected_first);
+    assert_eq!(object::id(&second), expected_second);
+    assert!(expected_first != expected_second);
+
+    record::destroy(first);
+    record::destroy(second);
     parent.delete();
-    settings::destroy_for_testing(cfg, cap);
-    clk.destroy_for_testing();
-}
-
-fun clock_at(ms: u64, ctx: &mut TxContext): clock::Clock {
-    let mut c = clock::create_for_testing(ctx);
-    c.set_for_testing(ms);
-    c
 }
 
 #[test]
-fun settings_events_are_complete() {
-    let mut ctx = tx_context::new_from_hint(@0xA, 0, 0, 0, 0);
-    let (mut cfg, cap) = settings::new_for_testing(&mut ctx);
-    let settings_id = object::id(&cfg);
-    let admin_cap_id = object::id(&cap);
+fun record_is_publicly_transferable_with_its_certificate() {
+    let mut scenario = ts::begin(@0xA);
+    let mut parent = object::new(scenario.ctx());
+    let record = record::new(
+        &mut parent,
+        DemoCertificate(77),
+        id(@0xBEEF),
+        1,
+    );
+    let record_id = object::id(&record);
+    parent.delete();
+    transfer::public_transfer(record, @0xB);
 
-    let mut created_events = event::events_by_type<settings::SettingsCreatedEvent>();
-    assert!(created_events.length() == 1);
-    let (event_settings_id, event_admin_cap_id, admin) =
-        settings::settings_created_event_fields(created_events.pop_back());
-    assert!(event_settings_id == settings_id);
-    assert!(event_admin_cap_id == admin_cap_id);
-    assert!(admin == @0xA);
+    scenario.next_tx(@0xB);
+    let received = scenario.take_from_sender<Record<DemoCertificate>>();
+    assert_eq!(object::id(&received), record_id);
+    assert_eq!(received.certificate().0, 77);
+    received.destroy();
 
-    settings::authorize<DemoMinter>(&mut cfg, &cap, &ctx);
-    let mut authorized_events = event::events_by_type<settings::MinterAuthorizedEvent>();
-    assert!(authorized_events.length() == 1);
-    let (event_settings_id, event_admin_cap_id, minter, authorized_by) =
-        settings::minter_authorized_event_fields(authorized_events.pop_back());
-    assert!(event_settings_id == settings_id);
-    assert!(event_admin_cap_id == admin_cap_id);
-    assert!(minter == type_name::with_defining_ids<DemoMinter>());
-    assert!(authorized_by == @0xA);
-
-    settings::revoke<DemoMinter>(&mut cfg, &cap, &ctx);
-    let mut revoked_events = event::events_by_type<settings::MinterRevokedEvent>();
-    assert!(revoked_events.length() == 1);
-    let (event_settings_id, event_admin_cap_id, minter, revoked_by) =
-        settings::minter_revoked_event_fields(revoked_events.pop_back());
-    assert!(event_settings_id == settings_id);
-    assert!(event_admin_cap_id == admin_cap_id);
-    assert!(minter == type_name::with_defining_ids<DemoMinter>());
-    assert!(revoked_by == @0xA);
-
-    settings::destroy_for_testing(cfg, cap);
-}
-
-#[test]
-fun init_shares_settings_and_transfers_the_admin_cap() {
-    let mut scenario = test_scenario::begin(@0xA);
-    settings::init_for_testing(scenario.ctx());
-
-    scenario.next_tx(@0xA);
-    let cfg = scenario.take_shared<settings::Settings>();
-    let cap = scenario.take_from_sender<settings::SettingsAdminCap>();
-    assert!(settings::minters(&cfg).is_empty());
-
-    test_scenario::return_shared(cfg);
-    scenario.return_to_sender(cap);
+    let destroyed = event::events_by_type<record::RecordDestroyedEvent<DemoCertificate>>();
+    assert_eq!(destroyed.length(), 1);
     scenario.end();
 }
