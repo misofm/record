@@ -3,26 +3,25 @@
 
 /// Creation policy for Miso Records.
 ///
-/// `Settings` is a shared allowlist of witness types. A distribution module defines
-/// a witness whose construction it controls, the Miso admin authorizes that type,
-/// and the module consumes a witness when it calls `record::mint`. This lets Miso
-/// add distribution mechanisms without changing the `Record` type or redeploying
-/// this package.
+/// `Settings` stores the one witness type currently authorized to create Records. A
+/// sales package defines a witness whose construction it controls, and the Miso admin
+/// may atomically replace that type when the complete sales implementation changes.
+/// Multiple purchase paths that coexist belong behind that sales package's one
+/// witness boundary.
 module miso_record::settings;
 
 use std::type_name::{Self, TypeName};
 use sui::event::emit;
-use sui::vec_set::{Self, VecSet};
 
 //=== Structs ===
 
-/// Shared allowlist of witness types authorized to create Records.
+/// The single witness type currently authorized to create Records, if any.
 public struct Settings has key {
     id: UID,
-    witnesses: VecSet<TypeName>,
+    witness: Option<TypeName>,
 }
 
-/// Authority to change the witness allowlist.
+/// Authority to replace or clear the active witness type.
 public struct SettingsAdminCap has key, store {
     id: UID,
 }
@@ -34,12 +33,13 @@ public struct SettingsCreatedEvent has copy, drop {
     admin_cap_id: ID,
 }
 
-public struct WitnessAuthorizedEvent has copy, drop {
+public struct WitnessSetEvent has copy, drop {
     settings_id: ID,
+    previous_witness: Option<TypeName>,
     witness: TypeName,
 }
 
-public struct WitnessRevokedEvent has copy, drop {
+public struct WitnessClearedEvent has copy, drop {
     settings_id: ID,
     witness: TypeName,
 }
@@ -55,7 +55,7 @@ fun init(ctx: &mut TxContext) {
 fun new(ctx: &mut TxContext): (Settings, SettingsAdminCap) {
     let settings = Settings {
         id: object::new(ctx),
-        witnesses: vec_set::empty(),
+        witness: option::none(),
     };
     let admin_cap = SettingsAdminCap { id: object::new(ctx) };
     emit(SettingsCreatedEvent {
@@ -67,27 +67,30 @@ fun new(ctx: &mut TxContext): (Settings, SettingsAdminCap) {
 
 //=== Admin Functions ===
 
-/// Authorize witness type `W` to create Records. This is idempotent.
+/// Make `W` the only witness type authorized to create Records. This atomically
+/// replaces the previous witness and is idempotent when `W` is already active.
 ///
 /// `W` should be a module-controlled, non-copyable witness whose values are only
-/// created by the distribution path that Miso intends to authorize.
-public fun authorize<W: drop>(self: &mut Settings, _: &SettingsAdminCap) {
+/// created by the sales paths that Miso intends to authorize.
+public fun set_witness<W: drop>(self: &mut Settings, _: &SettingsAdminCap) {
     let witness = type_name::with_defining_ids<W>();
-    if (!self.witnesses.contains(&witness)) {
-        self.witnesses.insert(witness);
-        emit(WitnessAuthorizedEvent {
+    let previous_witness = self.witness;
+    let next_witness = option::some(witness);
+    if (previous_witness != next_witness) {
+        self.witness = next_witness;
+        emit(WitnessSetEvent {
             settings_id: object::id(self),
+            previous_witness,
             witness,
         });
     };
 }
 
-/// Revoke witness type `W`. This is idempotent.
-public fun revoke<W: drop>(self: &mut Settings, _: &SettingsAdminCap) {
-    let witness = type_name::with_defining_ids<W>();
-    if (self.witnesses.contains(&witness)) {
-        self.witnesses.remove(&witness);
-        emit(WitnessRevokedEvent {
+/// Remove the active witness, disabling all Record creation. This is idempotent.
+public fun clear_witness(self: &mut Settings, _: &SettingsAdminCap) {
+    if (self.witness.is_some()) {
+        let witness = self.witness.extract();
+        emit(WitnessClearedEvent {
             settings_id: object::id(self),
             witness,
         });
@@ -98,12 +101,12 @@ public fun revoke<W: drop>(self: &mut Settings, _: &SettingsAdminCap) {
 
 /// Whether witness type `W` is authorized to create Records.
 public fun is_authorized<W: drop>(self: &Settings): bool {
-    self.witnesses.contains(&type_name::with_defining_ids<W>())
+    self.witness == option::some(type_name::with_defining_ids<W>())
 }
 
-/// All currently authorized witness types.
-public fun witnesses(self: &Settings): vector<TypeName> {
-    *self.witnesses.keys()
+/// The currently authorized witness type, if Record creation is enabled.
+public fun witness(self: &Settings): Option<TypeName> {
+    self.witness
 }
 
 //=== Test Helpers ===
@@ -125,13 +128,15 @@ public fun settings_created_event_fields(event: SettingsCreatedEvent): (ID, ID) 
 }
 
 #[test_only]
-public fun witness_authorized_event_fields(event: WitnessAuthorizedEvent): (ID, TypeName) {
-    let WitnessAuthorizedEvent { settings_id, witness } = event;
-    (settings_id, witness)
+public fun witness_set_event_fields(
+    event: WitnessSetEvent,
+): (ID, Option<TypeName>, TypeName) {
+    let WitnessSetEvent { settings_id, previous_witness, witness } = event;
+    (settings_id, previous_witness, witness)
 }
 
 #[test_only]
-public fun witness_revoked_event_fields(event: WitnessRevokedEvent): (ID, TypeName) {
-    let WitnessRevokedEvent { settings_id, witness } = event;
+public fun witness_cleared_event_fields(event: WitnessClearedEvent): (ID, TypeName) {
+    let WitnessClearedEvent { settings_id, witness } = event;
     (settings_id, witness)
 }

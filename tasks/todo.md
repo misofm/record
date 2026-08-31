@@ -1,46 +1,45 @@
-# Witness-authorized Record
+# Registry-sequenced Record
 
-> **2026-08-31 — current direction.** `Record<Certificate>` is replaced by one
-> concrete `Record`. Miso Record is the distribution format, so creation is governed
-> by a shared `miso_record::settings::Settings` allowlist rather than delegated to
-> arbitrary certificate specializations.
+> **2026-09-01 — current direction.** Record is Miso's concrete distribution format.
+> One singleton Registry owns its stable UID namespace and per-release sequences; one
+> rotatable witness type selects the complete active sales implementation.
 
 ## Core
 
-- [x] Add shared `Settings` with a `VecSet<TypeName>` of authorized witness types.
-- [x] Create and share Settings from `init`; transfer `SettingsAdminCap` to the
-      publisher.
-- [x] Add idempotent `authorize<W>`, `revoke<W>`, `is_authorized<W>`, enumeration,
-      and lifecycle events.
-- [x] Replace `Record<Certificate>` with concrete key-only `Record { id, release_id }`.
-- [x] Replace open `record::new` with `record::mint<W: drop>`, requiring `&Settings`
-      and consuming an authorized witness.
-- [x] Keep derived-only creation: every Record is claimed from a distribution parent
-      and `u64` number.
-- [x] Include the creating witness `TypeName` in `RecordCreatedEvent`.
-- [x] Keep address transfer and extension UID access; expose no share or freeze path.
-- [x] Cover authorization, revocation, idempotence, shared initialization,
-      deterministic IDs, collision rejection, extensions, and transfer in tests.
+- [x] Replace `Record<Certificate>` with one concrete Record.
+- [x] Store `release_id`, `registry_id`, Registry-allocated `number`,
+      Clock-stamped `created_at_ms`, type-stamped `purchase_currency`, and
+      transaction-stamped `purchased_by`.
+- [x] Add singleton shared `RecordRegistry { id, supplies: Table<ID, u64> }`.
+- [x] Allocate per-release numbers inside `record::mint` and derive every Record
+      UID from `(Registry, RecordKey(release_id, number))`.
+- [x] Replace the witness `VecSet` with one `Option<TypeName>`.
+- [x] Add atomic, idempotent `set_witness<W>` and idempotent `clear_witness`.
+- [x] Keep the consumed witness in `RecordCreatedEvent`, not in Record storage.
+- [x] Give Record `key + store` and remove its explicit transfer wrapper; callers
+      use framework `public_*` operations.
+- [x] Keep extension UID access and explicit destruction.
+- [x] Cover Registry continuity across witness replacement, per-release numbering,
+      provenance stamping, authorization replacement/clearing, initialization,
+      extensions, destruction, and framework transfer.
 
-## Primitive-library decision
+## Design consequences
 
-Keep the allowlist inside `miso_record::settings` until a second consumer needs the
-same semantics. Existing neighboring witness systems are similar but not identical:
-Vault authorization is per-vault and typed-dynamic-field based, while Audio records
-witness provenance without an allowlist.
-
-If the exact policy repeats, extract only a non-object
-`TypeAllowlist<phantom Scope>` primitive. Its constructor should require
-`std::internal::Permit<Scope>` so only the scope's defining module can instantiate
-that policy domain. Each consumer should retain its own Settings object, admin cap,
-events, and initialization rather than sharing one global authorization object.
+- Every Record mint mutates the singleton Registry. Global sequencing is intentional,
+  even though it prevents unrelated Record mints from executing in parallel.
+- Replacing the active witness disables the old sales package immediately but does
+  not change Record addresses or restart numbering.
+- Multiple simultaneous purchase mechanics must be implemented behind the one active
+  sales witness.
+- `key + store` permits transfer, wrapping, sharing, and freezing. Downstream access
+  policies may not treat `&Record` alone as proof of direct address ownership.
 
 ## Integration follow-ups
 
-- [ ] Update `miso_pressing` to replace its certificate with a package-controlled
-      `Witness() has drop` and call witness-gated `record::mint`.
-- [ ] Update downstream `miso_record` Git dependencies to remove `subdir = "move"`.
-- [ ] Authorize the pressing witness in the newly published Settings object.
-- [ ] Update `miso_record_seal_policy` from `Record<Certificate>` to concrete
-      `Record`.
-- [ ] Fresh-publish `miso_record`; this is incompatible with the certificate layout.
+- [ ] Update `miso_pressing` to pass `&mut RecordRegistry`, `Currency`, Clock,
+      and TxContext to `record::mint`.
+- [ ] Replace `settings::authorize` calls with `settings::set_witness`.
+- [ ] Update SDK/application transaction construction with the Registry shared input.
+- [ ] Replace `record::transfer` calls with framework transfer commands.
+- [ ] Redesign the Record Seal policy's ownership proof for `key + store`.
+- [ ] Fresh-publish `miso_record` and configure Registry, Settings, and admin-cap IDs.
