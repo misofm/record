@@ -14,6 +14,8 @@
 ///
 /// Extensions may still attach contextual state to the record UID. The certificate is
 /// different: it is a private field, created with the record and never detachable.
+/// `Record` is key-only: this module exposes address transfer, but deliberately exposes
+/// no share or freeze path and cannot be bypassed with the framework's `public_*` APIs.
 module miso_record::record;
 
 use sui::derived_object;
@@ -21,7 +23,7 @@ use sui::event::emit;
 
 //=== Structs ===
 
-public struct Record<Certificate: drop + store> has key, store {
+public struct Record<Certificate: drop + store> has key {
     id: UID,
     /// The release this is a copy of. This is the sole universal record fact.
     release_id: ID,
@@ -77,6 +79,18 @@ public fun new<Certificate: drop + store>(
         number,
     });
     record
+}
+
+/// Transfer a record to `recipient`.
+///
+/// `Record` deliberately omits `store`, so this module-restricted transfer is the
+/// only address-transfer path. In particular, external packages cannot publicly
+/// share, freeze, wrap, or transfer a record around this API.
+public fun transfer<Certificate: drop + store>(
+    record: Record<Certificate>,
+    recipient: address,
+) {
+    transfer::transfer(record, recipient)
 }
 
 /// Destroy a record. The caller is responsible for detaching any optional dynamic

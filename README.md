@@ -1,11 +1,11 @@
 # miso-record
 
-The Miso record — an owned, transferable copy of a release on Sui. The core fixes
-only the release and an issuer-defined certificate at birth; extensions can attach
-contextual state through the record's UID.
+The Miso record — an owned copy of a release on Sui. The core fixes only the release
+and an issuer-defined certificate at birth; extensions can attach contextual state
+through the record's UID.
 
 ```move
-public struct Record<Certificate: drop + store> has key, store {
+public struct Record<Certificate: drop + store> has key {
     id: UID,
     release_id: ID,
     certificate: Certificate,
@@ -51,6 +51,17 @@ field.
   public fun uid_mut<C: drop + store>(self: &mut Record<C>): &mut UID
   ```
 
+- **Transfer is explicit, sharing and freezing are unavailable.** `Record` omits
+  `store`, so another package cannot use `public_transfer`, `public_share_object`,
+  `public_freeze_object`, or wrap it. The core exposes the one intended by-value path:
+
+  ```move
+  public fun transfer<C: drop + store>(record: Record<C>, recipient: address)
+  ```
+
+  It performs the module-restricted `transfer::transfer`. The core exposes no share or
+  freeze function.
+
 ## Events
 
 Creation and destruction events are phantom-typed by certificate, so indexers can
@@ -63,13 +74,15 @@ filter the exact trusted record specialization.
 
 ## Gating on a record
 
-Gated material — a recording's stems, a mixer session, a scan of the lyric sheet — is
-opened against a proof, not a lookup: a verifier simulates a transaction with the
-claimed wallet as sender, and success *is* the authorization. That lives in
-[`miso_record_acl`](https://github.com/misonetwork/miso-record-extensions/tree/main/miso_record_acl),
-a [Seal](https://seal-docs.wal.app) decryption policy whose `seal_approve_*` entries take
-the record **by value** — the whole security argument, since a `Record` has `store` and
-`&Record` would let one shared copy open a release to everyone.
+Gated material — a release mix, stems, or a scan of the lyric sheet — is opened against
+a proof, not a lookup. The
+[`miso_record_seal_policy`](https://github.com/misofm/record-extensions/tree/main/miso_record_seal_policy)
+package provides a [Seal](https://docs.sui.io/sui-stack/seal/using-seal) policy that
+takes `&Record<C>` together with an immutable gate for the exact trusted certificate
+type. This is safe specifically because `Record` is key-only and the core exposes no
+share or freeze path: Seal accepts only direct PTB inputs, resolves their current
+on-chain versions, and simulates with sender/owner checks. A private `entry` function
+alone is not the ownership proof.
 
 ## Layout
 
@@ -93,10 +106,10 @@ cd move && sui move test
 
 | Package | State |
 |---|---|
-| `miso_record` | ✅ typed certificate, registry-free core, 6 tests, 100% coverage |
+| `miso_record` | ✅ typed certificate, key-only transfer control, registry-free core |
 
-This layout is incompatible with the previous published V1 package and requires a
-fresh package publication. The legacy `Published.toml` has been removed intentionally;
-a new one should be committed only after that fresh publication.
+This layout is incompatible with the previous published package and requires a fresh
+publication: removing `store` changes the `Record` abilities. Existing package IDs do
+not identify this key-only architecture.
 
 License: Apache-2.0

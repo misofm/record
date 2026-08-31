@@ -147,7 +147,7 @@ fun different_slots_on_one_parent_are_distinct_and_precomputable() {
 }
 
 #[test]
-fun record_is_publicly_transferable_with_its_certificate() {
+fun record_transfers_by_address_with_its_certificate() {
     let mut scenario = ts::begin(@0xA);
     let mut parent = object::new(scenario.ctx());
     let record = record::new(
@@ -158,7 +158,7 @@ fun record_is_publicly_transferable_with_its_certificate() {
     );
     let record_id = object::id(&record);
     parent.delete();
-    transfer::public_transfer(record, @0xB);
+    record::transfer(record, @0xB);
 
     scenario.next_tx(@0xB);
     let received = scenario.take_from_sender<Record<DemoCertificate>>();
