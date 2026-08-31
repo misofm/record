@@ -1,82 +1,123 @@
 # miso-record
 
-The Miso Record is an owned copy of a release on Sui. It is Miso's distribution
-format: every `Record` is created by a distribution mechanism that Miso has explicitly
-authorized.
+The Miso Record is an owned copy of a release on Sui. It is Miso's concrete
+distribution format: one stable Registry defines Record identity and per-release
+numbering while one governance-selected sales implementation controls creation.
 
 ```move
-public struct Record has key {
+public struct Record has key, store {
     id: UID,
     release_id: ID,
+    registry_id: ID,
+    number: u64,
+    created_at_ms: u64,
+    purchase_currency: TypeName,
+    purchased_by: address,
 }
 ```
 
-There is one concrete Record type. Issuance details are not embedded as a generic
-certificate, and arbitrary packages cannot create alternate Record specializations.
+There is one concrete Record type. Its immutable birth and purchase provenance is
+stored directly rather than delegated to a generic certificate.
+
+## Canonical Registry
+
+`RecordRegistry` is the singleton parent and canonical per-release number store:
+
+```move
+public struct RecordRegistry has key {
+    id: UID,
+    supplies: Table<ID, u64>,
+}
+```
+
+The Registry is created and shared during package publication. Every successful mint
+increments the named release's supply, uses that value as the Record's `number`,
+and claims `RecordKey(release_id, number)` from the Registry UID. A Record's
+address is therefore stable across complete replacements of the sales package:
+
+```move
+let expected = record::derive_address(registry_id, release_id, number);
+```
+
+Each release gets its own `1, 2, 3…` sequence, while `release_id` in the key keeps
+equal numbers collision-free. The Registry is intentionally a mutable shared input to
+every mint. Transactions still serialize on that root even though supplies live in a
+`Table`, which is the accepted cost of preserving canonical numbering across sales
+implementations.
 
 ## Creation policy
 
-`miso_record::settings::Settings` is a shared allowlist of distribution witness
-types. Its `SettingsAdminCap` authorizes changes to that list:
+`miso_record::settings::Settings` holds exactly one active witness type:
 
 ```move
-settings.authorize<miso_pressing::witness::Witness>(&settings_admin_cap);
-settings.revoke<miso_pressing::witness::Witness>(&settings_admin_cap);
-```
-
-An authorized distribution package controls construction of its witness:
-
-```move
-module miso_pressing::witness;
-
-public struct Witness() has drop;
-
-public(package) fun new(): Witness {
-    Witness()
+public struct Settings has key {
+    id: UID,
+    witness: Option<TypeName>,
 }
 ```
 
-Its distribution path consumes that witness when minting:
+The admin can atomically replace the complete sales implementation or disable Record
+creation:
 
 ```move
-let record = record::mint(
-    pressing.uid_mut(),
+settings.set_witness<miso_pressing::pressing::MintWitness>(&settings_admin_cap);
+settings.clear_witness(&settings_admin_cap);
+```
+
+`set_witness` is idempotent when the same type is already active. Replacing it
+immediately rejects the old witness while preserving the Registry and its sequence.
+Multiple purchase methods that coexist should live behind one sales package's
+module-controlled witness.
+
+The sales path consumes that witness when minting:
+
+```move
+let record = record::mint<miso_pressing::pressing::MintWitness, Currency>(
+    registry,
     settings,
-    witness::new(),
+    pressing::MintWitness(),
     release_id,
-    number,
+    clock,
+    ctx,
 );
 ```
 
-`mint` reads the shared Settings through `&Settings`, so Record creation does not
-mutate or serialize on the registry. Only the rare `authorize` and `revoke` operations
-need `&mut Settings`.
+`mint` reads Settings through `&Settings` and mutates the Registry. Governance
+should select only a non-copyable witness with a suitably restricted constructor.
 
-Authorization is a governance boundary: the admin must authorize only witness types
-whose constructors are suitably restricted. A witness should normally have only the
-`drop` ability and a package-private constructor.
+## Stored provenance
 
-## Record identity
+The Record module stamps rather than trusts independently supplied values:
 
-Every Record UID is derived from its distribution parent and a `u64` claim number.
-The pair `(parent, number)` is unique and its address can be computed before minting:
+- `registry_id` comes from the actual Registry object used to claim the UID.
+- `number` is allocated by the Registry and participates in
+  `RecordKey(release_id, number)`.
+- `created_at_ms` comes from Sui's `Clock`.
+- `purchase_currency` comes from the `Currency` type argument.
+- `purchased_by` comes from the transaction sender.
 
-```move
-let expected = record::derive_address(parent_id, number);
-```
-
-The number belongs to the distribution's namespace; it is emitted at creation but is
-not stored in the Record. The only universal Record fact is the copied release ID.
+`purchased_by` is the original purchaser, not the current owner and not necessarily
+the transfer recipient. The authorized witness type remains in
+`RecordCreatedEvent` for audit and indexing but is not stored in the Record.
 
 ## Ownership and extensions
 
-`Record` deliberately has `key` without `store`. External packages cannot use
-`public_transfer`, share, freeze, or wrap it. The module exposes address transfer but
-no sharing or freezing path, preserving the direct-ownership invariant used by Seal
-policies.
+`Record` has `key + store`, so callers use Sui's framework ownership operations
+directly:
 
-Possession governs extensions. A holder can provide `&mut Record`, so extensions can
-attach their own dynamic fields through:
+```move
+transfer::public_transfer(record, recipient);
+```
+
+Records may also be wrapped, placed in compatible custody systems, shared, or frozen.
+The Record module intentionally provides no redundant transfer wrapper and does not
+enforce direct address ownership.
+
+Consequently, an immutable `&Record` is not by itself proof that the transaction
+sender owns it: shared and frozen Records are readable by non-owners. Any
+ownership-gated policy must establish the relevant ownership mode independently.
+
+Extensions may use mutable Record access:
 
 ```move
 public fun uid(self: &Record): &UID
@@ -90,24 +131,12 @@ become inaccessible.
 
 | Event | Facts |
 |---|---|
-| `RecordCreatedEvent` | Record, distribution parent, release, claim number, witness type |
-| `RecordDestroyedEvent` | Record, release |
+| `RecordRegistryCreatedEvent` | Canonical Registry ID |
+| `RecordCreatedEvent` | Record, Registry, release, number, creation time, purchase currency, purchaser, witness type |
+| `RecordDestroyedEvent` | Record and release |
 | `SettingsCreatedEvent` | Settings and admin-cap IDs |
-| `WitnessAuthorizedEvent` | Settings and authorized witness type |
-| `WitnessRevokedEvent` | Settings and revoked witness type |
-
-## Why Settings stays local
-
-The reusable-looking mechanism is intentionally local to this package for now. The
-current neighboring witness policies have different semantics: some are per-object,
-some require witness participation during authorization, and some record provenance
-without an allowlist. Extracting a published primitive prematurely would add a hard
-package dependency without a proven common contract.
-
-If another layer needs this exact policy, the extraction boundary is a non-object
-`TypeAllowlist<phantom Scope>` guarded at construction by
-`std::internal::Permit<Scope>`. Each domain should continue to own its Settings
-object, admin capability, lifecycle, and events.
+| `WitnessSetEvent` | Settings, previous witness, and new witness |
+| `WitnessClearedEvent` | Settings and removed witness |
 
 ## Layout
 
@@ -126,10 +155,8 @@ tests/
 sui move test
 ```
 
-This architecture is incompatible with the previously published
-`Record<Certificate>` package and requires a fresh publication. Distribution and
-Seal-policy packages must update to the concrete `Record` type and witness-gated
-`record::mint` API. Git dependencies should target the repository root rather than
-using `subdir = "move"`.
+This architecture changes the Record layout, abilities, Settings layout, and mint API
+and therefore requires a fresh publication. Sales, Seal-policy, SDK, and application
+consumers must update to the new Registry and framework transfer path.
 
 License: Apache-2.0
