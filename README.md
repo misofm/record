@@ -1,115 +1,135 @@
 # miso-record
 
-The Miso record — an owned copy of a release on Sui. The core fixes only the release
-and an issuer-defined certificate at birth; extensions can attach contextual state
-through the record's UID.
+The Miso Record is an owned copy of a release on Sui. It is Miso's distribution
+format: every `Record` is created by a distribution mechanism that Miso has explicitly
+authorized.
 
 ```move
-public struct Record<Certificate: drop + store> has key {
+public struct Record has key {
     id: UID,
     release_id: ID,
-    certificate: Certificate,
 }
 ```
 
-The concrete certificate type identifies the mint path, while its value carries that
-path's immutable facts. For example, `miso_pressing::certificate::Certificate` stores
-the pressing, number, payment, and timestamp. It is embedded—not a detachable dynamic
-field.
+There is one concrete Record type. Issuance details are not embedded as a generic
+certificate, and arbitrary packages cannot create alternate Record specializations.
 
-## Design
+## Creation policy
 
-- **Release by `ID` only.** The core stores the release's `ID`, not a typed `Release`,
-  so it has **no dependency on the protocol**. Extensions that need the typed release
-  bring that dependency themselves.
+`miso_record::settings::Settings` is a shared allowlist of distribution witness
+types. Its `SettingsAdminCap` authorizes changes to that list:
 
-- **Trust is expressed by the exact record type.** `record::new` embeds a certificate
-  value and returns its specialization:
+```move
+settings.authorize<miso_pressing::witness::Witness>(&settings_admin_cap);
+settings.revoke<miso_pressing::witness::Witness>(&settings_admin_cap);
+```
 
-  ```move
-  public fun new<C: drop + store>(parent: &mut UID, certificate: C, release_id: ID, number: u64): Record<C>
-  ```
+An authorized distribution package controls construction of its witness:
 
-  Anyone may define a certificate type, but consumers choose which exact `Record<C>`
-  types they trust. A trusted certificate module restricts construction and omits
-  `copy`, preventing outsiders from minting or duplicating that specialization.
+```move
+module miso_pressing::witness;
 
-- **Every record derives off its minting context.** `new` claims the record's UID off
-  a `parent: &mut UID` (e.g. a `Pressing`'s UID) keyed by `RecordKey(number)`, so every
-  copy is deterministically addressable from its parent and a claim slot can be minted
-  at most once per parent. The record does not *store* the number — the core keeps
-  numbers as pure addressing (`derive_address(parent, number)` precomputes the
-  address); the readable meaning of a number belongs to the certificate.
-  There is deliberately no fresh-UID mint: a gifting or airdrop package derives off an
-  object of its own.
+public struct Witness() has drop;
 
-- **Otherwise, authority is possession.** Once a record exists, only the owner can
-  produce a `&mut Record`, so `uid_mut` is fully open — no capability, no allowlist:
+public(package) fun new(): Witness {
+    Witness()
+}
+```
 
-  ```move
-  public fun uid<C: drop + store>(self: &Record<C>): &UID
-  public fun uid_mut<C: drop + store>(self: &mut Record<C>): &mut UID
-  ```
+Its distribution path consumes that witness when minting:
 
-- **Transfer is explicit, sharing and freezing are unavailable.** `Record` omits
-  `store`, so another package cannot use `public_transfer`, `public_share_object`,
-  `public_freeze_object`, or wrap it. The core exposes the one intended by-value path:
+```move
+let record = record::mint(
+    pressing.uid_mut(),
+    settings,
+    witness::new(),
+    release_id,
+    number,
+);
+```
 
-  ```move
-  public fun transfer<C: drop + store>(record: Record<C>, recipient: address)
-  ```
+`mint` reads the shared Settings through `&Settings`, so Record creation does not
+mutate or serialize on the registry. Only the rare `authorize` and `revoke` operations
+need `&mut Settings`.
 
-  It performs the module-restricted `transfer::transfer`. The core exposes no share or
-  freeze function.
+Authorization is a governance boundary: the admin must authorize only witness types
+whose constructors are suitably restricted. A witness should normally have only the
+`drop` ability and a package-private constructor.
+
+## Record identity
+
+Every Record UID is derived from its distribution parent and a `u64` claim number.
+The pair `(parent, number)` is unique and its address can be computed before minting:
+
+```move
+let expected = record::derive_address(parent_id, number);
+```
+
+The number belongs to the distribution's namespace; it is emitted at creation but is
+not stored in the Record. The only universal Record fact is the copied release ID.
+
+## Ownership and extensions
+
+`Record` deliberately has `key` without `store`. External packages cannot use
+`public_transfer`, share, freeze, or wrap it. The module exposes address transfer but
+no sharing or freezing path, preserving the direct-ownership invariant used by Seal
+policies.
+
+Possession governs extensions. A holder can provide `&mut Record`, so extensions can
+attach their own dynamic fields through:
+
+```move
+public fun uid(self: &Record): &UID
+public fun uid_mut(self: &mut Record): &mut UID
+```
+
+Callers must detach extensions before destroying a Record or those dynamic fields
+become inaccessible.
 
 ## Events
 
-Creation and destruction events are phantom-typed by certificate, so indexers can
-filter the exact trusted record specialization.
-
-| Event | Indexed facts |
+| Event | Facts |
 |---|---|
-| `RecordCreatedEvent<Certificate>` | record, minting parent, release, claim number |
-| `RecordDestroyedEvent<Certificate>` | record, release |
+| `RecordCreatedEvent` | Record, distribution parent, release, claim number, witness type |
+| `RecordDestroyedEvent` | Record, release |
+| `SettingsCreatedEvent` | Settings and admin-cap IDs |
+| `WitnessAuthorizedEvent` | Settings and authorized witness type |
+| `WitnessRevokedEvent` | Settings and revoked witness type |
 
-## Gating on a record
+## Why Settings stays local
 
-Gated material — a release mix, stems, or a scan of the lyric sheet — is opened against
-a proof, not a lookup. The
-[`miso_record_seal_policy`](https://github.com/misofm/record-extensions/tree/main/miso_record_seal_policy)
-package provides a [Seal](https://docs.sui.io/sui-stack/seal/using-seal) policy that
-takes `&Record<C>` together with an immutable gate for the exact trusted certificate
-type. This is safe specifically because `Record` is key-only and the core exposes no
-share or freeze path: Seal accepts only direct PTB inputs, resolves their current
-on-chain versions, and simulates with sender/owner checks. A private `entry` function
-alone is not the ownership proof.
+The reusable-looking mechanism is intentionally local to this package for now. The
+current neighboring witness policies have different semantics: some are per-object,
+some require witness participation during authorization, and some record provenance
+without an allowlist. Extracting a published primitive prematurely would add a hard
+package dependency without a proven common contract.
+
+If another layer needs this exact policy, the extraction boundary is a non-object
+`TypeAllowlist<phantom Scope>` guarded at construction by
+`std::internal::Permit<Scope>`. Each domain should continue to own its Settings
+object, admin capability, lifecycle, and events.
 
 ## Layout
 
+```text
+Move.toml
+sources/
+  record.move
+  settings.move
+tests/
+  record_tests.move
 ```
-move/
-  sources/record.move     the slim Record
-  tests/record_tests.move
-```
-
-The `Pressing` lives in the sibling `miso_pressing` package and defines its own
-certificate. Other mint paths define other certificate types. Extensions to the
-record itself live under `record-extensions`.
 
 ## Build
 
 ```bash
-cd move && sui move test
+sui move test
 ```
 
-## Status
-
-| Package | State |
-|---|---|
-| `miso_record` | ✅ typed certificate, key-only transfer control, registry-free core |
-
-This layout is incompatible with the previous published package and requires a fresh
-publication: removing `store` changes the `Record` abilities. Existing package IDs do
-not identify this key-only architecture.
+This architecture is incompatible with the previously published
+`Record<Certificate>` package and requires a fresh publication. Distribution and
+Seal-policy packages must update to the concrete `Record` type and witness-gated
+`record::mint` API. Git dependencies should target the repository root rather than
+using `subdir = "move"`.
 
 License: Apache-2.0

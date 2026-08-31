@@ -1,63 +1,46 @@
-# Decouple drop from miso_record (witness-authorized mint)
+# Witness-authorized Record
 
-> **2026-07-28 — superseded in part.** The witness-gated mint design below still stands,
-> but the `Record` struct has since been slimmed to `{ id, release_id, number,
-> created_at_ms }`: `edition` and the purchase fields moved out (purchase terms are now a
-> `Receipt` dynamic field owned by `miso_drop`), minting lost the `Currency` type param
-> and gained `&Clock`, and the fresh-UID `mint` was deleted — the derived path is now the
-> singular `mint` (every record derives off its minting parent; the "retained for
-> airdrops" note below is obsolete). See `miso-pressing/tasks/todo.md` for the redesign
-> record.
+> **2026-08-31 — current direction.** `Record<Certificate>` is replaced by one
+> concrete `Record`. Miso Record is the distribution format, so creation is governed
+> by a shared `miso_record::settings::Settings` allowlist rather than delegated to
+> arbitrary certificate specializations.
 
-Design B: `miso_record` is the base package and owns a `Settings` allowlist of
-authorized minter *witness types*. Drop packages depend on `miso_record`, mint by
-presenting their own witness, and `miso_record` checks the type is authorized.
-A new drop package needs zero record redeploy — an admin authorizes its witness type.
+## Core
 
-## Plan
+- [x] Add shared `Settings` with a `VecSet<TypeName>` of authorized witness types.
+- [x] Create and share Settings from `init`; transfer `SettingsAdminCap` to the
+      publisher.
+- [x] Add idempotent `authorize<W>`, `revoke<W>`, `is_authorized<W>`, enumeration,
+      and lifecycle events.
+- [x] Replace `Record<Certificate>` with concrete key-only `Record { id, release_id }`.
+- [x] Replace open `record::new` with `record::mint<W: drop>`, requiring `&Settings`
+      and consuming an authorized witness.
+- [x] Keep derived-only creation: every Record is claimed from a distribution parent
+      and `u64` number.
+- [x] Include the creating witness `TypeName` in `RecordCreatedEvent`.
+- [x] Keep address transfer and extension UID access; expose no share or freeze path.
+- [x] Cover authorization, revocation, idempotence, shared initialization,
+      deterministic IDs, collision rejection, extensions, and transfer in tests.
 
-- [ ] `move/core/sources/settings.move` (NEW): `Settings` (shared, `VecSet<TypeName>`
-      of authorized minters) + `SettingsAdminCap`, `init`, `authorize<W>`, `revoke<W>`,
-      `is_authorized<W>`, events, test-only constructor.
-- [ ] `move/core/sources/record.move`: replace open `new`/pkg-private `new_derived`
-      with witness-gated `mint<W: drop>` and `mint_derived<W: drop>`; keep struct,
-      destroy, uid/uid_mut, views. Add `minter: TypeName` to the created event.
-- [ ] Delete `move/core/sources/drop.move` (moves to its own package).
-- [ ] `move/drop/` (NEW package `miso_drop`): Move.toml (deps miso + miso_record),
-      `sources/drop.move` — same `Drop<phantom Currency>`/pricing/lifecycle, but
-      `buy` takes `&Settings` and mints via `record::mint_derived(MintWitness {}, …)`.
-- [ ] Update `move/core/tests/record_tests.move` for the gated mint (authorized +
-      unauthorized-aborts).
-- [ ] `move/drop/tests/drop_tests.move` (NEW): full buy flow via `release::new_for_testing`.
-- [ ] `sui move test` both packages; update README.
+## Primitive-library decision
 
-## Review (done)
+Keep the allowlist inside `miso_record::settings` until a second consumer needs the
+same semantics. Existing neighboring witness systems are similar but not identical:
+Vault authorization is per-vault and typed-dynamic-field based, while Audio records
+witness provenance without an allowlist.
 
-- `move/core/sources/settings.move` — `Settings` (shared `VecSet<TypeName>`) +
-  `SettingsAdminCap`, `init`, `authorize<W>`/`revoke<W>` (idempotent + events),
-  `is_authorized<W>`, `minters`, test helpers.
-- `move/core/sources/record.move` — open `new`/pkg-`new_derived` replaced by
-  witness-gated `mint<W: drop>` / `mint_derived<W: drop>`; `number`/`RecordKey`
-  widened to `u64`; event carries `minter: TypeName`.
-- `move/core/sources/drop.move` — deleted (moved).
-- `move/drop/` — new `miso_drop` package; `buy` takes `&Settings`, mints via
-  `record::mint_derived(MintWitness {}, …, &mut self.id, …)`. u32 cast + overflow
-  guard removed (u64 counter maps straight through).
-- Tests: 4 core + 4 drop, all green. Cross-package unauthorized-witness abort proves
-  the runtime `Settings` gate holds from an external package.
-- Security: `MintWitness` (and any witness) is constructible only by its defining
-  module, so only `miso_drop` can mint under its type; `Settings` is passed by
-  *immutable* ref so concurrent buys don't serialize on it.
+If the exact policy repeats, extract only a non-object
+`TypeAllowlist<phantom Scope>` primitive. Its constructor should require
+`std::internal::Permit<Scope>` so only the scope's defining module can instantiate
+that policy domain. Each consumer should retain its own Settings object, admin cap,
+events, and initialization rather than sharing one global authorization object.
 
-### Follow-ups / notes
-- Breaking change vs. the deployed `miso_record` (drop::buy on testnet): fresh
-  publish of both packages, then admin runs `settings::authorize<miso_drop::drop::MintWitness>`.
-- `mint` (non-derived, fresh UID) is retained for future authorized minters
-  (airdrops/gifts) that don't derive off a drop.
+## Integration follow-ups
 
-## Deviations from literal ask (consequences of Design B)
-- `Drop` is `Drop<phantom Currency>` (record-specific), not generic over `<Item>`.
-  "Same record, different mechanics" = different drop *packages*, each authorized by
-  its witness type. (A generic `buy<Item>` can't call the Record-specific mint.)
-- No hot-potato round-trip: `buy` mints atomically via a `drop` witness gated by
-  `Settings`; the witness IS the "authorized type".
+- [ ] Update `miso_pressing` to replace its certificate with a package-controlled
+      `Witness() has drop` and call witness-gated `record::mint`.
+- [ ] Update downstream `miso_record` Git dependencies to remove `subdir = "move"`.
+- [ ] Authorize the pressing witness in the newly published Settings object.
+- [ ] Update `miso_record_seal_policy` from `Record<Certificate>` to concrete
+      `Record`.
+- [ ] Fresh-publish `miso_record`; this is incompatible with the certificate layout.
