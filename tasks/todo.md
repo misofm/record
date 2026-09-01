@@ -1,45 +1,48 @@
-# Registry-sequenced Record
+# Edition-scoped Pressing and Record
 
-> **2026-09-01 — current direction.** Record is Miso's concrete distribution format.
-> One singleton Registry owns its stable UID namespace and per-release sequences; one
-> rotatable witness type selects the complete active sales implementation.
+> **2026-09-01 — current direction.** `miso_record` owns the Record lifecycle. Each
+> Release derives one Pressing per edition; each Pressing owns its supply, optional
+> maximum, Record namespace, and authorized Distributor witness types.
 
 ## Core
 
-- [x] Replace `Record<Certificate>` with one concrete Record.
-- [x] Store `release_id`, `registry_id`, Registry-allocated `number`,
-      Clock-stamped `created_at_ms`, type-stamped `purchase_currency`, and
-      transaction-stamped `purchased_by`.
-- [x] Add singleton shared `RecordRegistry { id, supplies: Table<ID, u64> }`.
-- [x] Allocate per-release numbers inside `record::mint` and derive every Record
-      UID from `(Registry, RecordKey(release_id, number))`.
-- [x] Replace the witness `VecSet` with one `Option<TypeName>`.
-- [x] Add atomic, idempotent `set_witness<W>` and idempotent `clear_witness`.
-- [x] Keep the consumed witness in `RecordCreatedEvent`, not in Record storage.
-- [x] Give Record `key + store` and remove its explicit transfer wrapper; callers
-      use framework `public_*` operations.
-- [x] Keep extension UID access and explicit destruction.
-- [x] Cover Registry continuity across witness replacement, per-release numbering,
-      provenance stamping, authorization replacement/clearing, initialization,
-      extensions, destruction, and framework transfer.
+- [x] Keep one concrete `Record` with `key + store`.
+- [x] Add `Pressing` to `miso_record` as the lifecycle and issuance boundary.
+- [x] Derive each Pressing from its Release at `PressingKey(edition)`.
+- [x] Store `release_id`, `pressing_id`, edition-local `number`, `edition`, and
+      Clock-stamped `created_at_ms` on each Record.
+- [x] Derive Record UIDs from `(pressing_id, RecordKey(number))`.
+- [x] Track edition-local supply directly on the Pressing.
+- [x] Version Pressings and fail closed on unsupported representations.
+- [x] Support immutable `Option<u64>` maximum supply.
+- [x] Authorize multiple Distributor witness types per Pressing with `VecSet`.
+- [x] Add idempotent Distributor authorization and revocation.
+- [x] Keep Distributor type in `RecordCreated`, not in Record storage.
+- [x] Remove the singleton Registry, Table, Settings, and package initializer.
+- [x] Keep Record extension UID access, explicit destruction, and framework
+      `public_*` ownership operations.
+- [x] Cover derived identities, edition-local numbering, caps, Distributor rotation,
+      authorization failures, provenance, extensions, destruction, and transfer.
 
 ## Design consequences
 
-- Every Record mint mutates the singleton Registry. Global sequencing is intentional,
-  even though it prevents unrelated Record mints from executing in parallel.
-- Replacing the active witness disables the old sales package immediately but does
-  not change Record addresses or restart numbering.
-- Multiple simultaneous purchase mechanics must be implemented behind the one active
-  sales witness.
+- Mints within one edition serialize on that Pressing's counter. Different editions
+  can mint independently.
+- A Distributor replacement preserves the Pressing ID and its sequence. Authorize the
+  replacement before revoking the old type.
+- Distributor packages own sales, redemption, migration, airdrop, payment, schedule,
+  and delivery mechanics.
+- Maximum supply is a permanent edition invariant. A different cap requires a new
+  edition and Pressing.
 - `key + store` permits transfer, wrapping, sharing, and freezing. Downstream access
   policies may not treat `&Record` alone as proof of direct address ownership.
 
 ## Integration follow-ups
 
-- [ ] Update `miso_pressing` to pass `&mut RecordRegistry`, `Currency`, Clock,
-      and TxContext to `record::mint`.
-- [ ] Replace `settings::authorize` calls with `settings::set_witness`.
-- [ ] Update SDK/application transaction construction with the Registry shared input.
-- [ ] Replace `record::transfer` calls with framework transfer commands.
+- [ ] Replace the old `miso_pressing` package with one or more Distributor packages.
+- [ ] Update Distributor calls to use `pressing::mint(witness, clock)`.
+- [ ] Update SDK/application transaction construction with `pressing_id` and edition.
+- [ ] Add Distributor-specific purchase/payment provenance where required.
 - [ ] Redesign the Record Seal policy's ownership proof for `key + store`.
-- [ ] Fresh-publish `miso_record` and configure Registry, Settings, and admin-cap IDs.
+- [ ] Add a migration Distributor for Records from earlier package publications.
+- [ ] Fresh-publish `miso_record` and configure Pressing and Distributor IDs.

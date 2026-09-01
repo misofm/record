@@ -1,104 +1,125 @@
 # miso-record
 
-The Miso Record is an owned copy of a release on Sui. It is Miso's concrete
-distribution format: one stable Registry defines Record identity and per-release
-numbering while one governance-selected sales implementation controls creation.
+The Miso Record package owns the complete Record lifecycle on Sui. A `Pressing` is
+one numbered edition of a Miso Release; a `Record` is one
+numbered copy within that edition. External Distributor packages decide how a Record
+is sold, redeemed, airdropped, migrated, or otherwise delivered.
 
 ```move
+public struct Pressing has key {
+    id: UID,
+    version: u64,
+    release_id: ID,
+    edition: u64,
+    supply: u64,
+    max_supply: Option<u64>,
+    distributors: VecSet<TypeName>,
+}
+
 public struct Record has key, store {
     id: UID,
     release_id: ID,
-    registry_id: ID,
+    pressing_id: ID,
+    edition: u64,
     number: u64,
     created_at_ms: u64,
-    purchase_currency: TypeName,
-    purchased_by: address,
 }
 ```
 
-There is one concrete Record type. Its immutable birth and purchase provenance is
-stored directly rather than delegated to a generic certificate.
+There is no singleton Registry, Table, Settings object, or package initializer.
+Unrelated editions mutate unrelated Pressings and can mint concurrently.
 
-## Canonical Registry
+Pressings currently use representation version `1`. Minting, Distributor
+authorization/revocation, and cap-gated mutable UID access reject unsupported
+versions so package upgrades fail closed until an explicit migration exists.
 
-`RecordRegistry` is the singleton parent and canonical per-release number store:
+## Deterministic editions and Records
 
-```move
-public struct RecordRegistry has key {
-    id: UID,
-    supplies: Table<ID, u64>,
-}
-```
-
-The Registry is created and shared during package publication. Every successful mint
-increments the named release's supply, uses that value as the Record's `number`,
-and claims `RecordKey(release_id, number)` from the Registry UID. A Record's
-address is therefore stable across complete replacements of the sales package:
+Each Pressing is derived directly from its Release at `PressingKey(edition)`. The
+Release's `ReleaseAdminCap` authorizes creation, and claiming the same edition twice
+aborts:
 
 ```move
-let expected = record::derive_address(registry_id, release_id, number);
-```
-
-Each release gets its own `1, 2, 3…` sequence, while `release_id` in the key keeps
-equal numbers collision-free. The Registry is intentionally a mutable shared input to
-every mint. Transactions still serialize on that root even though supplies live in a
-`Table`, which is the accepted cost of preserving canonical numbering across sales
-implementations.
-
-## Creation policy
-
-`miso_record::settings::Settings` holds exactly one active witness type:
-
-```move
-public struct Settings has key {
-    id: UID,
-    witness: Option<TypeName>,
-}
-```
-
-The admin can atomically replace the complete sales implementation or disable Record
-creation:
-
-```move
-settings.set_witness<miso_pressing::pressing::MintWitness>(&settings_admin_cap);
-settings.clear_witness(&settings_admin_cap);
-```
-
-`set_witness` is idempotent when the same type is already active. Replacing it
-immediately rejects the old witness while preserving the Registry and its sequence.
-Multiple purchase methods that coexist should live behind one sales package's
-module-controlled witness.
-
-The sales path consumes that witness when minting:
-
-```move
-let record = record::mint<miso_pressing::pressing::MintWitness, Currency>(
-    registry,
-    settings,
-    pressing::MintWitness(),
-    release_id,
-    clock,
-    ctx,
+let (mut pressing, pressing_cap) = pressing::new(
+    release,
+    release_cap,
+    1,
+    option::some(500),
 );
 ```
 
-`mint` reads Settings through `&Settings` and mutates the Registry. Governance
-should select only a non-copyable witness with a suitably restricted constructor.
+Edition numbers and Record numbers are 1-based. Every Pressing owns an independent
+Record sequence, so Edition 1 Record 1 and Edition 2 Record 1 are both valid and have
+different IDs.
 
-## Stored provenance
+```move
+let pressing_id = pressing::derive_id(release_id, edition);
+let record_id = record::derive_id(pressing_id, number);
+```
 
-The Record module stamps rather than trusts independently supplied values:
+The full identity chain is therefore:
 
-- `registry_id` comes from the actual Registry object used to claim the UID.
-- `number` is allocated by the Registry and participates in
-  `RecordKey(release_id, number)`.
+```text
+Release
+└── PressingKey(edition) → Pressing
+    └── RecordKey(number) → Record
+```
+
+## Supply
+
+`max_supply` is fixed when the Pressing is created:
+
+- `none()` creates an unlimited edition.
+- `some(quantity)` creates a permanently capped edition.
+- `some(0)` is invalid.
+
+The Pressing checks the cap before incrementing `supply`. Failed or unauthorized
+mints do not consume a number because the transaction rolls back atomically.
+
+## Distributors
+
+Each Pressing authorizes its own small set of module-controlled Distributor witness
+types. This permits concurrent distribution paths and edition-specific policy without
+a global governance object:
+
+```move
+pressing.authorize_distributor<record_store::DistributorWitness>(&pressing_cap);
+pressing.revoke_distributor<legacy_store::DistributorWitness>(&pressing_cap);
+```
+
+Both operations are idempotent and emit an event only when the set changes. A new
+Distributor can be authorized before the old one is revoked, preserving the edition's
+existing sequence during migration.
+
+A Distributor constructs its witness internally and consumes it immediately:
+
+```move
+public fun distribute(
+    pressing: &mut Pressing,
+    clock: &Clock,
+): Record {
+    pressing.mint(DistributorWitness(), clock)
+}
+```
+
+`mint` returns the Record rather than transferring it. The Distributor remains free
+to deliver it through any composable transaction flow. Prices, payments, schedules,
+recipient selection, and sale state do not belong in `miso_record`.
+
+The witness type is written to `RecordCreated` for audit and indexing but is not
+stored on every Record.
+
+## Stored lifecycle data
+
+The package derives or stamps every Record field:
+
+- `release_id`, `pressing_id`, and `edition` come from the Pressing.
+- `number` is allocated from the Pressing's edition-local sequence.
+- The Record UID is claimed at `RecordKey(number)` from the Pressing UID.
 - `created_at_ms` comes from Sui's `Clock`.
-- `purchase_currency` comes from the `Currency` type argument.
-- `purchased_by` comes from the transaction sender.
 
-`purchased_by` is the original purchaser, not the current owner and not necessarily
-the transfer recipient. The authorized witness type remains in
-`RecordCreatedEvent` for audit and indexing but is not stored in the Record.
+Purchase currency, payer, price, and recipient are Distributor concerns rather than
+universal Record lifecycle data.
 
 ## Ownership and extensions
 
@@ -131,20 +152,19 @@ become inaccessible.
 
 | Event | Facts |
 |---|---|
-| `RecordRegistryCreatedEvent` | Canonical Registry ID |
-| `RecordCreatedEvent` | Record, Registry, release, number, creation time, purchase currency, purchaser, witness type |
-| `RecordDestroyedEvent` | Record and release |
-| `SettingsCreatedEvent` | Settings and admin-cap IDs |
-| `WitnessSetEvent` | Settings, previous witness, and new witness |
-| `WitnessClearedEvent` | Settings and removed witness |
+| `PressingCreated` | Pressing, release, edition, and optional maximum supply |
+| `DistributorAuthorized` | Pressing and authorized Distributor type |
+| `DistributorRevoked` | Pressing and revoked Distributor type |
+| `RecordCreated` | Record lineage, edition-local number, creation time, and Distributor type |
+| `RecordDestroyed` | Record and its Pressing |
 
 ## Layout
 
 ```text
 Move.toml
 sources/
+  pressing.move
   record.move
-  settings.move
 tests/
   record_tests.move
 ```
@@ -155,8 +175,9 @@ tests/
 sui move test
 ```
 
-This architecture changes the Record layout, abilities, Settings layout, and mint API
-and therefore requires a fresh publication. Sales, Seal-policy, SDK, and application
-consumers must update to the new Registry and framework transfer path.
+This architecture changes the Record layout and mint API, adds Pressing, and removes
+Registry and Settings. It therefore requires a fresh publication. Distributor,
+Seal-policy, SDK, and application consumers must migrate to Pressing IDs and
+edition-local Record numbers.
 
 License: Apache-2.0

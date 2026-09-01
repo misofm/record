@@ -4,24 +4,25 @@
 #[test_only]
 module miso_record::record_tests;
 
-use miso_record::record::{Self, Record, RecordRegistry};
-use miso_record::settings;
+use miso::release::{Self, Release, ReleaseAdminCap};
+use miso_record::pressing::{Self, Pressing};
+use miso_record::record::{Self, Record};
 use std::type_name;
 use std::unit_test::{assert_eq, destroy};
 use sui::clock;
+use sui::derived_object;
 use sui::dynamic_field as df;
 use sui::event;
-use sui::sui::SUI;
 use sui::test_scenario as ts;
 
-/// Stand-in for the active sales package's module-controlled witness.
-public struct DemoWitness() has drop;
+/// Stand-in for an authorized distributor package's module-controlled witness.
+public struct DemoDistributor() has drop;
 
-/// Stand-in for a complete replacement sales package.
-public struct ReplacementWitness() has drop;
+/// Stand-in for a replacement or concurrent distributor package.
+public struct ReplacementDistributor() has drop;
 
-/// A witness type that is never authorized.
-public struct ImpostorWitness() has drop;
+/// A distributor witness type that is never authorized.
+public struct ImpostorDistributor() has drop;
 
 /// Stand-in for an extension's module-private dynamic-field key.
 public struct DemoKey() has copy, drop, store;
@@ -30,95 +31,81 @@ fun id(addr: address): ID {
     object::id_from_address(addr)
 }
 
-fun demo_witness(): DemoWitness {
-    DemoWitness()
+fun demo_distributor(): DemoDistributor {
+    DemoDistributor()
 }
 
-fun replacement_witness(): ReplacementWitness {
-    ReplacementWitness()
+fun replacement_distributor(): ReplacementDistributor {
+    ReplacementDistributor()
 }
 
-fun impostor_witness(): ImpostorWitness {
-    ImpostorWitness()
+fun impostor_distributor(): ImpostorDistributor {
+    ImpostorDistributor()
 }
 
-fun mint_record<W: drop, Currency>(
-    registry: &mut RecordRegistry,
-    settings: &settings::Settings,
-    witness: W,
-    release_id: ID,
-    created_at_ms: u64,
+fun a_release(ctx: &mut TxContext): (Release, ReleaseAdminCap) {
+    release::new_for_testing("Test", vector[], ctx)
+}
+
+fun mint_record<Distributor: drop>(
+    pressing: &mut Pressing,
+    distributor: Distributor,
+    timestamp_ms: u64,
     ctx: &mut TxContext,
 ): Record {
     let mut clk = clock::create_for_testing(ctx);
-    clk.set_for_testing(created_at_ms);
-    let record = record::mint<W, Currency>(
-        registry,
-        settings,
-        witness,
-        release_id,
-        &clk,
-        ctx,
-    );
+    clk.set_for_testing(timestamp_ms);
+    let record = pressing.mint(distributor, &clk);
     clk.destroy_for_testing();
     record
 }
 
 #[test]
-fun authorized_witness_mints_a_self_describing_extensible_record() {
+fun authorized_distributor_mints_a_self_describing_extensible_record() {
     let mut ctx = tx_context::new_from_hint(@0xA, 0, 0, 0, 0);
     let release_id = id(@0xBEEF);
-    let (mut settings, admin_cap) = settings::new_for_testing(&mut ctx);
-    settings.set_witness<DemoWitness>(&admin_cap);
-    let mut registry = record::new_registry_for_testing(&mut ctx);
-    let registry_id = object::id(&registry);
+    let (mut pressing, admin_cap) =
+        pressing::new_for_testing(release_id, 2, option::none(), &mut ctx);
+    pressing.authorize_distributor<DemoDistributor>(&admin_cap);
+    let pressing_id = object::id(&pressing);
     let created_at_ms = 1_726_000_123;
 
-    let mut r = mint_record<DemoWitness, SUI>(
-        &mut registry,
-        &settings,
-        demo_witness(),
-        release_id,
+    let mut r = mint_record(
+        &mut pressing,
+        demo_distributor(),
         created_at_ms,
         &mut ctx,
     );
 
     assert_eq!(r.release_id(), release_id);
-    assert_eq!(r.registry_id(), registry_id);
+    assert_eq!(r.pressing_id(), pressing_id);
+    assert_eq!(r.edition(), 2);
     assert_eq!(r.number(), 1);
     assert_eq!(r.created_at_ms(), created_at_ms);
-    assert_eq!(r.purchase_currency(), type_name::with_defining_ids<SUI>());
-    assert_eq!(r.purchased_by(), @0xA);
-    assert_eq!(registry.supply(release_id), 1);
-    assert_eq!(object::id(&r), record::derive_address(registry_id, release_id, 1).to_id());
+    assert_eq!(pressing.supply(), 1);
+    assert_eq!(pressing.max_supply(), option::none());
+    assert!(pressing.is_distributor_authorized<DemoDistributor>());
+    assert_eq!(pressing.distributors().length(), 1);
+    assert_eq!(object::id(&r), record::derive_id(pressing_id, 1));
 
-    let mut registry_events = event::events_by_type<record::RecordRegistryCreatedEvent>();
-    assert_eq!(registry_events.length(), 1);
-    assert_eq!(
-        record::registry_created_event_fields(registry_events.pop_back()),
-        registry_id,
-    );
-
-    let mut created_events = event::events_by_type<record::RecordCreatedEvent>();
+    let mut created_events = event::events_by_type<record::RecordCreated>();
     assert_eq!(created_events.length(), 1);
     let (
         event_record_id,
-        event_registry_id,
         event_release_id,
+        event_pressing_id,
+        edition,
         number,
         event_created_at_ms,
-        purchase_currency,
-        purchased_by,
-        witness,
-    ) = record::record_created_event_fields(created_events.pop_back());
+        distributor,
+    ) = record::created_event_fields(created_events.pop_back());
     assert_eq!(event_record_id, object::id(&r));
-    assert_eq!(event_registry_id, registry_id);
     assert_eq!(event_release_id, release_id);
+    assert_eq!(event_pressing_id, pressing_id);
+    assert_eq!(edition, 2);
     assert_eq!(number, 1);
     assert_eq!(event_created_at_ms, created_at_ms);
-    assert_eq!(purchase_currency, type_name::with_defining_ids<SUI>());
-    assert_eq!(purchased_by, @0xA);
-    assert_eq!(witness, type_name::with_defining_ids<DemoWitness>());
+    assert_eq!(distributor, type_name::with_defining_ids<DemoDistributor>());
 
     df::add(r.uid_mut(), DemoKey(), b"extension");
     assert!(df::exists(r.uid(), DemoKey()));
@@ -126,279 +113,287 @@ fun authorized_witness_mints_a_self_describing_extensible_record() {
 
     let record_id = object::id(&r);
     r.destroy();
-    let mut destroyed_events = event::events_by_type<record::RecordDestroyedEvent>();
+    let mut destroyed_events = event::events_by_type<record::RecordDestroyed>();
     assert_eq!(destroyed_events.length(), 1);
-    let (event_record_id, event_release_id) =
-        record::record_destroyed_event_fields(destroyed_events.pop_back());
+    let (event_record_id, event_pressing_id) =
+        record::destroyed_event_fields(destroyed_events.pop_back());
     assert_eq!(event_record_id, record_id);
-    assert_eq!(event_release_id, release_id);
+    assert_eq!(event_pressing_id, pressing_id);
 
-    destroy(registry);
-    destroy(settings);
+    destroy(pressing);
     destroy(admin_cap);
 }
 
 #[test]
-fun registry_allocates_an_independent_sequence_for_each_release() {
+fun pressings_allocate_edition_local_sequences() {
     let mut ctx = tx_context::dummy();
-    let (mut settings, admin_cap) = settings::new_for_testing(&mut ctx);
-    settings.set_witness<DemoWitness>(&admin_cap);
-    let mut registry = record::new_registry_for_testing(&mut ctx);
-    let registry_id = object::id(&registry);
+    let release_id = id(@0xCAFE);
+    let (mut first_pressing, first_cap) =
+        pressing::new_for_testing(release_id, 1, option::none(), &mut ctx);
+    let (mut second_pressing, second_cap) =
+        pressing::new_for_testing(release_id, 2, option::none(), &mut ctx);
+    first_pressing.authorize_distributor<DemoDistributor>(&first_cap);
+    second_pressing.authorize_distributor<DemoDistributor>(&second_cap);
 
-    let first = mint_record<DemoWitness, SUI>(
-        &mut registry,
-        &settings,
-        demo_witness(),
-        id(@0xCAFE),
-        0,
-        &mut ctx,
-    );
-    let second = mint_record<DemoWitness, SUI>(
-        &mut registry,
-        &settings,
-        demo_witness(),
-        id(@0xBEEF),
-        0,
-        &mut ctx,
-    );
-    let third = mint_record<DemoWitness, SUI>(
-        &mut registry,
-        &settings,
-        demo_witness(),
-        id(@0xCAFE),
-        0,
-        &mut ctx,
-    );
+    let first = mint_record(&mut first_pressing, demo_distributor(), 0, &mut ctx);
+    let second = mint_record(&mut second_pressing, demo_distributor(), 0, &mut ctx);
+    let third = mint_record(&mut first_pressing, demo_distributor(), 0, &mut ctx);
 
     assert_eq!(first.number(), 1);
     assert_eq!(second.number(), 1);
     assert_eq!(third.number(), 2);
-    assert_eq!(registry.supply(id(@0xCAFE)), 2);
-    assert_eq!(registry.supply(id(@0xBEEF)), 1);
-    assert_eq!(registry.supply(id(@0xD00D)), 0);
-    assert_eq!(
-        object::id(&first),
-        record::derive_address(registry_id, id(@0xCAFE), 1).to_id(),
-    );
-    assert_eq!(
-        object::id(&second),
-        record::derive_address(registry_id, id(@0xBEEF), 1).to_id(),
-    );
-    assert_eq!(
-        object::id(&third),
-        record::derive_address(registry_id, id(@0xCAFE), 2).to_id(),
-    );
+    assert_eq!(first.edition(), 1);
+    assert_eq!(second.edition(), 2);
+    assert_eq!(first_pressing.supply(), 2);
+    assert_eq!(second_pressing.supply(), 1);
+    assert_eq!(object::id(&first), record::derive_id(object::id(&first_pressing), 1));
+    assert_eq!(object::id(&second), record::derive_id(object::id(&second_pressing), 1));
+    assert_eq!(object::id(&third), record::derive_id(object::id(&first_pressing), 2));
 
     first.destroy();
     second.destroy();
     third.destroy();
-    destroy(registry);
-    destroy(settings);
-    destroy(admin_cap);
+    destroy(first_pressing);
+    destroy(first_cap);
+    destroy(second_pressing);
+    destroy(second_cap);
 }
 
 #[test]
-fun replacing_sales_package_continues_the_registry_sequence() {
+fun distributor_replacement_continues_the_pressing_sequence() {
     let mut ctx = tx_context::dummy();
-    let (mut settings, admin_cap) = settings::new_for_testing(&mut ctx);
-    let mut registry = record::new_registry_for_testing(&mut ctx);
+    let (mut pressing, admin_cap) =
+        pressing::new_for_testing(id(@0xCAFE), 1, option::none(), &mut ctx);
 
-    settings.set_witness<DemoWitness>(&admin_cap);
-    let first = mint_record<DemoWitness, SUI>(
-        &mut registry,
-        &settings,
-        demo_witness(),
-        id(@0xCAFE),
-        0,
-        &mut ctx,
-    );
+    pressing.authorize_distributor<DemoDistributor>(&admin_cap);
+    pressing.authorize_distributor<DemoDistributor>(&admin_cap);
+    let first = mint_record(&mut pressing, demo_distributor(), 0, &mut ctx);
 
-    settings.set_witness<ReplacementWitness>(&admin_cap);
-    let second = mint_record<ReplacementWitness, SUI>(
-        &mut registry,
-        &settings,
-        replacement_witness(),
-        id(@0xCAFE),
-        0,
-        &mut ctx,
-    );
+    pressing.authorize_distributor<ReplacementDistributor>(&admin_cap);
+    let second = mint_record(&mut pressing, replacement_distributor(), 0, &mut ctx);
+    pressing.revoke_distributor<DemoDistributor>(&admin_cap);
+    pressing.revoke_distributor<DemoDistributor>(&admin_cap);
+    let third = mint_record(&mut pressing, replacement_distributor(), 0, &mut ctx);
 
     assert_eq!(first.number(), 1);
     assert_eq!(second.number(), 2);
-    assert_eq!(first.registry_id(), second.registry_id());
+    assert_eq!(third.number(), 3);
+    assert_eq!(pressing.distributors().length(), 1);
+    assert!(!pressing.is_distributor_authorized<DemoDistributor>());
+    assert!(pressing.is_distributor_authorized<ReplacementDistributor>());
+
+    let authorized = event::events_by_type<pressing::DistributorAuthorized>();
+    assert_eq!(authorized.length(), 2);
+    let revoked = event::events_by_type<pressing::DistributorRevoked>();
+    assert_eq!(revoked.length(), 1);
 
     first.destroy();
     second.destroy();
-    destroy(registry);
-    destroy(settings);
+    third.destroy();
+    destroy(pressing);
     destroy(admin_cap);
 }
 
-#[test, expected_failure(abort_code = record::ENotAuthorized, location = record)]
-fun unauthorized_witness_cannot_mint() {
+#[test, expected_failure(
+    abort_code = pressing::EDistributorNotAuthorized,
+    location = pressing,
+)]
+fun unauthorized_distributor_cannot_mint() {
     let mut ctx = tx_context::dummy();
-    let (settings, admin_cap) = settings::new_for_testing(&mut ctx);
-    let mut registry = record::new_registry_for_testing(&mut ctx);
-
-    let record = mint_record<ImpostorWitness, SUI>(
-        &mut registry,
-        &settings,
-        impostor_witness(),
-        id(@0xBEEF),
-        0,
-        &mut ctx,
-    );
+    let (mut pressing, admin_cap) =
+        pressing::new_for_testing(id(@0xBEEF), 1, option::none(), &mut ctx);
+    let record = mint_record(&mut pressing, impostor_distributor(), 0, &mut ctx);
     record.destroy();
-    destroy(registry);
-    destroy(settings);
+    destroy(pressing);
     destroy(admin_cap);
 }
 
-#[test, expected_failure(abort_code = record::ENotAuthorized, location = record)]
-fun clearing_the_witness_disables_minting() {
+#[test, expected_failure(
+    abort_code = pressing::EDistributorNotAuthorized,
+    location = pressing,
+)]
+fun revoked_distributor_cannot_mint() {
     let mut ctx = tx_context::dummy();
-    let (mut settings, admin_cap) = settings::new_for_testing(&mut ctx);
-    settings.set_witness<DemoWitness>(&admin_cap);
-    settings.clear_witness(&admin_cap);
-    let mut registry = record::new_registry_for_testing(&mut ctx);
-
-    let record = mint_record<DemoWitness, SUI>(
-        &mut registry,
-        &settings,
-        demo_witness(),
-        id(@0xBEEF),
-        0,
-        &mut ctx,
-    );
+    let (mut pressing, admin_cap) =
+        pressing::new_for_testing(id(@0xBEEF), 1, option::none(), &mut ctx);
+    pressing.authorize_distributor<DemoDistributor>(&admin_cap);
+    pressing.revoke_distributor<DemoDistributor>(&admin_cap);
+    let record = mint_record(&mut pressing, demo_distributor(), 0, &mut ctx);
     record.destroy();
-    destroy(registry);
-    destroy(settings);
+    destroy(pressing);
     destroy(admin_cap);
 }
 
-#[test, expected_failure(abort_code = record::ENotAuthorized, location = record)]
-fun replacing_the_witness_immediately_rejects_the_old_sales_package() {
+#[test, expected_failure(abort_code = pressing::EMaxSupplyReached, location = pressing)]
+fun capped_pressing_rejects_the_next_record_after_its_maximum() {
     let mut ctx = tx_context::dummy();
-    let (mut settings, admin_cap) = settings::new_for_testing(&mut ctx);
-    settings.set_witness<DemoWitness>(&admin_cap);
-    settings.set_witness<ReplacementWitness>(&admin_cap);
-    let mut registry = record::new_registry_for_testing(&mut ctx);
-
-    let record = mint_record<DemoWitness, SUI>(
-        &mut registry,
-        &settings,
-        demo_witness(),
-        id(@0xBEEF),
-        0,
-        &mut ctx,
-    );
+    let (mut pressing, admin_cap) =
+        pressing::new_for_testing(id(@0xBEEF), 1, option::some(2), &mut ctx);
+    pressing.authorize_distributor<DemoDistributor>(&admin_cap);
+    let first = mint_record(&mut pressing, demo_distributor(), 0, &mut ctx);
+    let second = mint_record(&mut pressing, demo_distributor(), 0, &mut ctx);
+    first.destroy();
+    second.destroy();
+    let record = mint_record(&mut pressing, demo_distributor(), 0, &mut ctx);
     record.destroy();
-    destroy(registry);
-    destroy(settings);
+    destroy(pressing);
     destroy(admin_cap);
 }
 
 #[test]
-fun settings_holds_one_rotatable_witness_and_emits_changes_once() {
+fun release_derives_one_pressing_per_edition() {
     let mut ctx = tx_context::new_from_hint(@0xA, 0, 0, 0, 0);
-    let (mut settings, admin_cap) = settings::new_for_testing(&mut ctx);
-    let settings_id = object::id(&settings);
-    let admin_cap_id = object::id(&admin_cap);
+    let (mut release, release_cap) = a_release(&mut ctx);
+    let release_id = object::id(&release);
 
-    let mut created_events = event::events_by_type<settings::SettingsCreatedEvent>();
-    assert_eq!(created_events.length(), 1);
-    let (event_settings_id, event_admin_cap_id) =
-        settings::settings_created_event_fields(created_events.pop_back());
-    assert_eq!(event_settings_id, settings_id);
-    assert_eq!(event_admin_cap_id, admin_cap_id);
-    assert_eq!(settings.witness(), option::none());
-
-    settings.set_witness<DemoWitness>(&admin_cap);
-    settings.set_witness<DemoWitness>(&admin_cap);
-    settings.set_witness<ReplacementWitness>(&admin_cap);
-    assert!(!settings.is_authorized<DemoWitness>());
-    assert!(settings.is_authorized<ReplacementWitness>());
-    assert_eq!(
-        settings.witness(),
-        option::some(type_name::with_defining_ids<ReplacementWitness>()),
+    let (first, first_cap) = pressing::new(
+        &mut release,
+        &release_cap,
+        1,
+        option::none(),
+    );
+    let (second, second_cap) = pressing::new(
+        &mut release,
+        &release_cap,
+        2,
+        option::some(500),
     );
 
-    let set_events = event::events_by_type<settings::WitnessSetEvent>();
-    assert_eq!(set_events.length(), 2);
-    let (event_settings_id, previous, witness) =
-        settings::witness_set_event_fields(set_events[0]);
-    assert_eq!(event_settings_id, settings_id);
-    assert_eq!(previous, option::none());
-    assert_eq!(witness, type_name::with_defining_ids<DemoWitness>());
-    let (event_settings_id, previous, witness) =
-        settings::witness_set_event_fields(set_events[1]);
-    assert_eq!(event_settings_id, settings_id);
-    assert_eq!(previous, option::some(type_name::with_defining_ids<DemoWitness>()));
-    assert_eq!(witness, type_name::with_defining_ids<ReplacementWitness>());
+    assert_eq!(object::id(&first), pressing::derive_id(release_id, 1));
+    assert_eq!(object::id(&second), pressing::derive_id(release_id, 2));
+    assert_eq!(object::id(&first_cap), pressing::derive_admin_cap_id(object::id(&first)));
+    assert_eq!(first_cap.pressing_id(), object::id(&first));
+    assert_eq!(first.release_id(), release_id);
+    assert_eq!(first.edition(), 1);
+    assert_eq!(first.max_supply(), option::none());
+    assert_eq!(second.edition(), 2);
+    assert_eq!(second.max_supply(), option::some(500));
 
-    settings.clear_witness(&admin_cap);
-    settings.clear_witness(&admin_cap);
-    assert_eq!(settings.witness(), option::none());
-    assert!(!settings.is_authorized<ReplacementWitness>());
+    let created = event::events_by_type<pressing::PressingCreated>();
+    assert_eq!(created.length(), 2);
+    let (pressing_id, event_release_id, edition, max_supply) =
+        pressing::created_event_fields(created[1]);
+    assert_eq!(pressing_id, object::id(&second));
+    assert_eq!(event_release_id, release_id);
+    assert_eq!(edition, 2);
+    assert_eq!(max_supply, option::some(500));
 
-    let mut cleared_events = event::events_by_type<settings::WitnessClearedEvent>();
-    assert_eq!(cleared_events.length(), 1);
-    let (event_settings_id, witness) =
-        settings::witness_cleared_event_fields(cleared_events.pop_back());
-    assert_eq!(event_settings_id, settings_id);
-    assert_eq!(witness, type_name::with_defining_ids<ReplacementWitness>());
+    destroy(first);
+    destroy(first_cap);
+    destroy(second);
+    destroy(second_cap);
+    destroy(release);
+    destroy(release_cap);
+}
 
-    destroy(settings);
+#[test, expected_failure(
+    abort_code = derived_object::EObjectAlreadyExists,
+    location = derived_object,
+)]
+fun release_cannot_create_the_same_edition_twice() {
+    let mut ctx = tx_context::dummy();
+    let (mut release, release_cap) = a_release(&mut ctx);
+    let (first, first_cap) = pressing::new(
+        &mut release,
+        &release_cap,
+        1,
+        option::none(),
+    );
+    let (second, second_cap) = pressing::new(
+        &mut release,
+        &release_cap,
+        1,
+        option::none(),
+    );
+    destroy(first);
+    destroy(first_cap);
+    destroy(second);
+    destroy(second_cap);
+    destroy(release);
+    destroy(release_cap);
+}
+
+#[test, expected_failure(abort_code = pressing::EUnauthorized, location = pressing)]
+fun distributor_authorization_requires_the_matching_pressing_cap() {
+    let mut ctx = tx_context::dummy();
+    let (mut pressing, admin_cap) =
+        pressing::new_for_testing(id(@0xBEEF), 1, option::none(), &mut ctx);
+    let foreign_cap = pressing::foreign_admin_cap_for_testing(id(@0xDEAD), &mut ctx);
+    pressing.authorize_distributor<DemoDistributor>(&foreign_cap);
+    destroy(pressing);
+    destroy(admin_cap);
+    destroy(foreign_cap);
+}
+
+#[test, expected_failure(abort_code = pressing::EWrongVersion, location = pressing)]
+fun stale_pressing_rejects_distributor_authorization() {
+    let mut ctx = tx_context::dummy();
+    let (mut pressing, admin_cap) =
+        pressing::new_for_testing(id(@0xBEEF), 1, option::none(), &mut ctx);
+    pressing.set_version_for_testing(0);
+    pressing.authorize_distributor<DemoDistributor>(&admin_cap);
+    destroy(pressing);
     destroy(admin_cap);
 }
 
-#[test]
-fun init_shares_settings_and_transfers_the_admin_cap() {
-    let mut scenario = ts::begin(@0xA);
-    settings::init_for_testing(scenario.ctx());
-
-    scenario.next_tx(@0xA);
-    let settings = scenario.take_shared<settings::Settings>();
-    let admin_cap = scenario.take_from_sender<settings::SettingsAdminCap>();
-    assert_eq!(settings.witness(), option::none());
-
-    ts::return_shared(settings);
-    scenario.return_to_sender(admin_cap);
-    scenario.end();
+#[test, expected_failure(abort_code = pressing::EWrongVersion, location = pressing)]
+fun stale_pressing_rejects_minting() {
+    let mut ctx = tx_context::dummy();
+    let (mut pressing, admin_cap) =
+        pressing::new_for_testing(id(@0xBEEF), 1, option::none(), &mut ctx);
+    pressing.authorize_distributor<DemoDistributor>(&admin_cap);
+    pressing.set_version_for_testing(0);
+    let record = mint_record(&mut pressing, demo_distributor(), 0, &mut ctx);
+    record.destroy();
+    destroy(pressing);
+    destroy(admin_cap);
 }
 
-#[test]
-fun init_shares_the_single_empty_registry() {
-    let mut scenario = ts::begin(@0xA);
-    record::init_for_testing(scenario.ctx());
+#[test, expected_failure(abort_code = pressing::EWrongVersion, location = pressing)]
+fun stale_pressing_rejects_mutable_uid_access() {
+    let mut ctx = tx_context::dummy();
+    let (mut pressing, admin_cap) =
+        pressing::new_for_testing(id(@0xBEEF), 1, option::none(), &mut ctx);
+    pressing.set_version_for_testing(0);
+    let _uid = pressing.uid_mut(&admin_cap);
+    destroy(pressing);
+    destroy(admin_cap);
+}
 
-    scenario.next_tx(@0xB);
-    let registry = scenario.take_shared<RecordRegistry>();
-    assert_eq!(registry.supply(id(@0xBEEF)), 0);
+#[test, expected_failure(abort_code = pressing::EInvalidEdition, location = pressing)]
+fun edition_zero_is_rejected() {
+    let mut ctx = tx_context::dummy();
+    let (mut release, release_cap) = a_release(&mut ctx);
+    let (pressing, pressing_cap) =
+        pressing::new(&mut release, &release_cap, 0, option::none());
+    destroy(pressing);
+    destroy(pressing_cap);
+    destroy(release);
+    destroy(release_cap);
+}
 
-    ts::return_shared(registry);
-    scenario.end();
+#[test, expected_failure(abort_code = pressing::EInvalidMaxSupply, location = pressing)]
+fun capped_pressing_rejects_zero_maximum() {
+    let mut ctx = tx_context::dummy();
+    let (mut release, release_cap) = a_release(&mut ctx);
+    let (pressing, pressing_cap) =
+        pressing::new(&mut release, &release_cap, 1, option::some(0));
+    destroy(pressing);
+    destroy(pressing_cap);
+    destroy(release);
+    destroy(release_cap);
 }
 
 #[test]
 fun record_supports_framework_public_transfer() {
     let mut scenario = ts::begin(@0xA);
-    let (mut settings, admin_cap) = settings::new_for_testing(scenario.ctx());
-    settings.set_witness<DemoWitness>(&admin_cap);
-    let mut registry = record::new_registry_for_testing(scenario.ctx());
-    let record = mint_record<DemoWitness, SUI>(
-        &mut registry,
-        &settings,
-        demo_witness(),
-        id(@0xBEEF),
-        0,
-        scenario.ctx(),
-    );
+    let (mut pressing, admin_cap) =
+        pressing::new_for_testing(id(@0xBEEF), 1, option::none(), scenario.ctx());
+    pressing.authorize_distributor<DemoDistributor>(&admin_cap);
+    let record = mint_record(&mut pressing, demo_distributor(), 0, scenario.ctx());
     let record_id = object::id(&record);
 
-    destroy(registry);
-    destroy(settings);
+    destroy(pressing);
     destroy(admin_cap);
     transfer::public_transfer(record, @0xB);
 
