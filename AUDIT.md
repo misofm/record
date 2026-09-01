@@ -14,11 +14,9 @@ findings.**
   immutable `max_supply`, and `VecSet<TypeName>` of authorized Distributors.
 - `PressingAdminCap` authorizes Distributor changes and mutable Pressing extension
   access. It is derived from and bound to one Pressing ID.
-- Pressing representation version `1` is checked before minting, Distributor
-  changes, and cap-gated mutable UID access.
-- `pressing::mint<Distributor>` checks that Distributor type, checks the optional
-  maximum, allocates the next number, and calls the package-private Record
-  constructor.
+- `pressing::mint<Distributor, Currency>` checks the Distributor type, positive
+  purchase price, and optional maximum; allocates the next number; and calls the
+  package-private Record constructor.
 - Every Record ID is claimed from its Pressing at `RecordKey(number)`.
 - Record has `key + store`, so ownership is deliberately composable rather than
   module-restricted.
@@ -27,7 +25,7 @@ findings.**
 
 - **Record construction is closed.** The production constructor is
   `public(package)`, and only `pressing::mint` reaches it. External Distributors
-  cannot select Record fields or numbers.
+  cannot select lineage, currency type, buyer, timestamp, or Record number.
 - **Pressing construction is Release-authorized.** `release::uid_mut` rejects a
   mismatched Release cap. `PressingKey(edition)` makes each `(release, edition)`
   canonical and claim-once.
@@ -37,14 +35,11 @@ findings.**
 - **The derivation chain is fully scoped.** A Pressing derives from `(release,
   edition)`, and a Record derives from `(pressing, number)`. Equal Record numbers in
   different editions cannot collide.
-- **Failed mints do not consume numbers.** Authorization is checked before mutation,
-  the maximum is checked before increment, and any later abort rolls the increment
-  and derived-object claim back atomically.
+- **Failed purchases do not consume numbers.** Authorization, positive purchase
+  price, and maximum supply are checked before mutation. Any later abort rolls the
+  increment and derived-object claim back atomically.
 - **Supply caps are core and immutable.** `none()` is uncapped; `some(n)` requires
   `n > 0`. There is no setter that can weaken or revise the edition's stated cap.
-- **Unsupported representations fail closed.** Security-sensitive mutation paths
-  abort with a human-readable `EWrongVersion` until an upgrade provides an explicit
-  migration.
 - **Distributor identity is exact and edition-scoped.** Authorization and mint both
   use `type_name::with_defining_ids<Distributor>()`. A separately published
   identically named type is not authorized accidentally, and authorization on one
@@ -54,10 +49,11 @@ findings.**
   Record namespace. Add and revoke operations are idempotent.
 - **Witness values are consumed.** A recommended witness has only `drop` and a
   restricted constructor, so it cannot be copied or stored for later minting.
-- **Stored lifecycle data is internally bound.** Release, Pressing, and edition come
+- **Stored purchase data is internally bound.** Release, Pressing, and edition come
   from the actual Pressing; number comes from its counter; Record ID uses that number;
-  and `created_at_ms` comes from `Clock`. Distributor type remains event-only audit
-  provenance.
+  currency comes from the concrete type; buyer comes from `TxContext`; and purchase
+  time comes from `Clock`. The authorized Distributor supplies the positive price
+  after validating payment. Distributor type remains event-only audit provenance.
 - **Distributor storage is intentionally small and inline.** `VecSet` gives simple
   duplicate-free membership. Its O(n) behavior is appropriate for a handful of
   issuance paths; it is not intended as an unbounded registry.
@@ -81,9 +77,9 @@ findings.**
 - A compromised Pressing cap can authorize a malicious Distributor or modify
   cap-gated extensions. It cannot rewrite the immutable maximum or directly select a
   Record number through any public API.
-- Payment, payer, price, schedule, and recipient facts are not Record invariants.
-  Distributor packages must validate and record those facts where their mechanics
-  require them.
+- Currency, positive price, buyer, and purchase time are Record invariants. The
+  authorized Distributor must validate that the supplied price equals the payment it
+  accepted. Pricing rule, schedule, and final recipient remain Distributor concerns.
 
 ## Operational requirements
 
@@ -98,12 +94,12 @@ until that type is revoked.
 
 Clients can derive every Pressing and Record ID from `(release_id, edition, number)`.
 Deployment configuration therefore tracks active Pressing IDs and Distributor package
-versions, not singleton Registry or Settings IDs.
+IDs, not singleton Registry or Settings IDs.
 
 ## Verification
 
-Fifteen Move unit tests cover Release-derived Pressing identity, duplicate-edition
+Fourteen Move unit tests cover Release-derived Pressing identity, duplicate-edition
 rejection, edition validation, capped and uncapped supply, edition-local sequences,
 Distributor authorization, revocation and replacement, mismatched capabilities,
-stale-version rejection, Record provenance, dynamic-field extension access,
-destruction, and framework public transfer.
+positive purchase prices, complete purchase provenance, Record and Pressing
+extension access, shared Pressings, destruction, and framework public transfer.

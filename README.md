@@ -1,18 +1,16 @@
 # miso-record
 
 The Miso Record package owns the complete Record lifecycle on Sui. A `Pressing` is
-one numbered edition of a Miso Release; a `Record` is one
-numbered copy within that edition. External Distributor packages decide how a Record
-is sold, redeemed, airdropped, migrated, or otherwise delivered.
+one numbered edition of a Miso Release; a `Record` is one numbered purchase within
+that edition. External Distributor packages validate different sales mechanics.
 
 ```move
 public struct Pressing has key {
     id: UID,
-    version: u64,
     release_id: ID,
-    edition: u64,
-    supply: u64,
-    max_supply: Option<u64>,
+    edition: u16,
+    supply: u32,
+    max_supply: Option<u32>,
     distributors: VecSet<TypeName>,
 }
 
@@ -20,18 +18,21 @@ public struct Record has key, store {
     id: UID,
     release_id: ID,
     pressing_id: ID,
-    edition: u64,
-    number: u64,
-    created_at_ms: u64,
+    edition: u16,
+    number: u32,
+    purchase_currency: TypeName,
+    purchase_price: u64,
+    purchased_by: address,
+    purchased_timestamp_ms: u64,
 }
 ```
 
 There is no singleton Registry, Table, Settings object, or package initializer.
-Unrelated editions mutate unrelated Pressings and can mint concurrently.
+Unrelated editions mutate unrelated Pressings and can sell concurrently.
 
-Pressings currently use representation version `1`. Minting, Distributor
-authorization/revocation, and cap-gated mutable UID access reject unsupported
-versions so package upgrades fail closed until an explicit migration exists.
+The package is intended to be made immutable when published. Future lifecycle
+designs ship as separate packages with explicit migration paths, so on-chain
+objects do not carry package-upgrade versions.
 
 ## Deterministic editions and Records
 
@@ -48,13 +49,13 @@ let (mut pressing, pressing_cap) = pressing::new(
 );
 ```
 
-Edition numbers and Record numbers are 1-based. Every Pressing owns an independent
+Edition numbers and Record numbers start at 1. Every Pressing owns an independent
 Record sequence, so Edition 1 Record 1 and Edition 2 Record 1 are both valid and have
 different IDs.
 
 ```move
-let pressing_id = pressing::derive_id(release_id, edition);
-let record_id = record::derive_id(pressing_id, number);
+let pressing_address = pressing::derive_address(release_id, edition);
+let record_address = record::derive_address(pressing_id, number);
 ```
 
 The full identity chain is therefore:
@@ -94,19 +95,26 @@ existing sequence during migration.
 A Distributor constructs its witness internally and consumes it immediately:
 
 ```move
-public fun distribute(
+public fun purchase<Currency>(
     pressing: &mut Pressing,
+    purchase_price: u64,
     clock: &Clock,
+    ctx: &mut TxContext,
 ): Record {
-    pressing.mint(DistributorWitness(), clock)
+    pressing.mint<DistributorWitness, Currency>(
+        DistributorWitness(),
+        purchase_price,
+        clock,
+        ctx,
+    )
 }
 ```
 
 `mint` returns the Record rather than transferring it. The Distributor remains free
-to deliver it through any composable transaction flow. Prices, payments, schedules,
-recipient selection, and sale state do not belong in `miso_record`.
+to deliver it through any composable transaction flow. The Distributor validates
+payment and sale state; `miso_record` stores the resulting purchase provenance.
 
-The witness type is written to `RecordCreated` for audit and indexing but is not
+The witness type is written to `pressing::RecordPurchasedEvent` for audit and indexing but is not
 stored on every Record.
 
 ## Stored lifecycle data
@@ -116,10 +124,13 @@ The package derives or stamps every Record field:
 - `release_id`, `pressing_id`, and `edition` come from the Pressing.
 - `number` is allocated from the Pressing's edition-local sequence.
 - The Record UID is claimed at `RecordKey(number)` from the Pressing UID.
-- `created_at_ms` comes from Sui's `Clock`.
+- `purchase_currency` comes from the Distributor's concrete `Currency` type.
+- `purchase_price` is the positive amount validated by the Distributor.
+- `purchased_by` comes from `TxContext.sender()`.
+- `purchased_timestamp_ms` comes from Sui's `Clock`.
 
-Purchase currency, payer, price, and recipient are Distributor concerns rather than
-universal Record lifecycle data.
+The eventual recipient is deliberately not stored: the returned Record remains
+composable and may be purchased as a gift.
 
 ## Ownership and extensions
 
@@ -152,11 +163,12 @@ become inaccessible.
 
 | Event | Facts |
 |---|---|
-| `PressingCreated` | Pressing, release, edition, and optional maximum supply |
-| `DistributorAuthorized` | Pressing and authorized Distributor type |
-| `DistributorRevoked` | Pressing and revoked Distributor type |
-| `RecordCreated` | Record lineage, edition-local number, creation time, and Distributor type |
-| `RecordDestroyed` | Record and its Pressing |
+| `PressingCreatedEvent` | Pressing, release, edition, and optional maximum supply |
+| `DistributorAuthorizedEvent` | Pressing and authorized Distributor type |
+| `DistributorRevokedEvent` | Pressing and revoked Distributor type |
+| `RecordCreatedEvent` | Record lineage and edition-local number |
+| `RecordPurchasedEvent` | Record lineage, currency, price, buyer, purchase time, and Distributor type |
+| `RecordDestroyedEvent` | Record and its Pressing |
 
 ## Layout
 
