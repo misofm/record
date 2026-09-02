@@ -5,4 +5,4 @@ license = "Apache-2.0"
 authors = ["Miso Labs, Inc. (build@miso.network)"]
 
 [dependencies]
-miso = { git = "https://github.com/misonetwork/protocol.git", rev = "6de5f9881ee62c81c57ce16832efc24dc33ae429" }
+miso = { git = "https://github.com/misonetwork/protocol.git", rev = "22e247741581df95ec02f61b5e795dc44c31b9fb" }
