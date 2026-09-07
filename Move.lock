@@ -23,19 +23,19 @@ manifest_digest = "E41BBD67BE8940D26C79D78B028477EF5B33BA217A1282C78ACB344CF8A5E
 deps = { std = "MoveStdlib", sui = "Sui" }
 
 [pinned.mainnet.miso]
-source = { git = "https://github.com/misofm/protocol.git", subdir = ".", rev = "22e247741581df95ec02f61b5e795dc44c31b9fb" }
+source = { git = "https://github.com/misofm/protocol.git", subdir = ".", rev = "ffa0e38b8ba4815d81de1076101ea37d2c71c623" }
 use_environment = "mainnet"
-manifest_digest = "CC0EC4CB96919E8E0D1A92F4C5BCEC984C48899B8CB4281B6336EE8A0568E7B2"
+manifest_digest = "F1538B296F5BE05AEE0D9AFAF8855CA7B7FA20480A631D23395D2C5F7D636B48"
 deps = { bps = "bps", miso_share = "miso_share", std = "MoveStdlib", sui = "Sui" }
 
 [pinned.mainnet.miso_record]
 source = { root = true }
 use_environment = "mainnet"
-manifest_digest = "EEDEAD62394EA867892C56EBC049255EDE0950623AC71D1C520147E86A7FE559"
+manifest_digest = "0CE252ECBFC67C3D251D6F5E96EE31DF7BFED582D2CFF18B2B67AC3A7D825830"
 deps = { miso = "miso", std = "MoveStdlib", sui = "Sui" }
 
 [pinned.mainnet.miso_share]
-source = { git = "https://github.com/misofm/share.git", subdir = ".", rev = "6af1c637dd12d3d291116db8f2b0b18a05339d2d" }
+source = { git = "https://github.com/misofm/share.git", subdir = ".", rev = "36dcbf2db710c9544c80427e128324733b6f6044" }
 use_environment = "mainnet"
 manifest_digest = "E41BBD67BE8940D26C79D78B028477EF5B33BA217A1282C78ACB344CF8A5ECF6"
 deps = { std = "MoveStdlib", sui = "Sui" }
