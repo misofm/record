@@ -4,7 +4,7 @@
 #[test_only]
 module miso_record::record_tests;
 
-use miso::release::{Self, Release, ReleaseAdminCap};
+use musicos::release::{Self, Release, ReleaseAdminCap};
 use miso_record::pressing::{Self, Pressing};
 use miso_record::record::{Self, Record};
 use std::type_name;

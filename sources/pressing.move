@@ -10,7 +10,7 @@
 /// that edition. Distributors own delivery mechanics; the Pressing owns issuance.
 module miso_record::pressing;
 
-use miso::release::{Release, ReleaseAdminCap};
+use musicos::release::{Release, ReleaseAdminCap};
 use miso_record::record::{Self, Record};
 use std::type_name::{Self, TypeName};
 use sui::{clock::Clock, derived_object, event::emit, vec_set::{Self, VecSet}};
