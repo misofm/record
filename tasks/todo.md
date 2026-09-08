@@ -1,13 +1,13 @@
 # Edition-scoped Pressing and Record
 
-> **2026-09-01 — current direction.** `miso_record` owns the Record lifecycle. Each
+> **2026-09-01 — current direction.** `record` owns the Record lifecycle. Each
 > Release derives one Pressing per edition; each Pressing owns its supply, optional
 > maximum, Record namespace, and authorized Distributor witness types.
 
 ## Core
 
 - [x] Keep one concrete `Record` with `key + store`.
-- [x] Add `Pressing` to `miso_record` as the lifecycle and purchase boundary.
+- [x] Add `Pressing` to `record` as the lifecycle and purchase boundary.
 - [x] Derive each Pressing from its Release at `PressingKey(edition)`.
 - [x] Store `release_id`, `pressing_id`, edition-local `number`, `edition`, currency,
       price, buyer, and Clock-stamped purchase time on each Record.
@@ -44,4 +44,4 @@
 - [ ] Update SDK/application transaction construction with `pressing_id` and edition.
 - [ ] Redesign the Record Seal policy's ownership proof for `key + store`.
 - [ ] Add a migration Distributor for Records from earlier package publications.
-- [ ] Fresh-publish `miso_record` and configure Pressing and Distributor IDs.
+- [ ] Fresh-publish `record` and configure Pressing and Distributor IDs.

@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #[test_only]
-module miso_record::record_tests;
+module record::record_tests;
 
 use musicos::release::{Self, Release, ReleaseAdminCap};
-use miso_record::pressing::{Self, Pressing};
-use miso_record::record::{Self, Record};
+use record::pressing::{Self, Pressing};
+use record::record::{Self, Record};
 use std::type_name;
 use std::unit_test::{assert_eq, destroy};
 use sui::clock;

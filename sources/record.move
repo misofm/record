@@ -6,7 +6,7 @@
 /// `Pressing` owns issuance. This module owns only the Record asset and its
 /// deterministic identity within that Pressing. Distribution mechanics such as
 /// pricing and payment validation live in authorized distributor packages.
-module miso_record::record;
+module record::record;
 
 use std::type_name::{Self, TypeName};
 use sui::{clock::Clock, derived_object, event::emit};
@@ -65,7 +65,7 @@ public struct RecordDestroyedEvent has copy, drop {
 
 /// Mint the next Record in a Pressing's sequence.
 ///
-/// Only another module in `miso_record` can call this constructor. `Pressing`
+/// Only another module in `record` can call this constructor. `Pressing`
 /// allocates `number` and checks distributor authorization and supply before
 /// reaching this function.
 public(package) fun new<Currency>(

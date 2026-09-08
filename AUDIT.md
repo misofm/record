@@ -1,4 +1,4 @@
-# Security Review — `miso_record`
+# Security Review — `record`
 
 **Revision:** working tree · **Date:** 2026-09-01 · **Toolchain:** Sui 1.78.1
 

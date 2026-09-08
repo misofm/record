@@ -112,7 +112,7 @@ public fun purchase<Currency>(
 
 `mint` returns the Record rather than transferring it. The Distributor remains free
 to deliver it through any composable transaction flow. The Distributor validates
-payment and sale state; `miso_record` stores the resulting purchase provenance.
+payment and sale state; `record` stores the resulting purchase provenance.
 
 The witness type is written to `pressing::RecordPurchasedEvent` for audit and indexing but is not
 stored on every Record.

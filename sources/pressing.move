@@ -8,10 +8,10 @@
 /// Pressing owns an independent Record sequence, an optional immutable
 /// maximum supply, and the set of distributor witness types allowed to mint from
 /// that edition. Distributors own delivery mechanics; the Pressing owns issuance.
-module miso_record::pressing;
+module record::pressing;
 
 use musicos::release::{Release, ReleaseAdminCap};
-use miso_record::record::{Self, Record};
+use record::record::{Self, Record};
 use std::type_name::{Self, TypeName};
 use sui::{clock::Clock, derived_object, event::emit, vec_set::{Self, VecSet}};
 
