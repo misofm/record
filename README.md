@@ -163,12 +163,16 @@ become inaccessible.
 
 | Event | Facts |
 |---|---|
-| `PressingCreatedEvent` | Pressing, release, edition, and optional maximum supply |
-| `DistributorAuthorizedEvent` | Pressing and authorized Distributor type |
-| `DistributorRevokedEvent` | Pressing and revoked Distributor type |
-| `RecordCreatedEvent` | Record lineage and edition-local number |
-| `RecordPurchasedEvent` | Record lineage, currency, price, buyer, purchase time, and Distributor type |
-| `RecordDestroyedEvent` | Record and its Pressing |
+| `PressingCreatedEvent` | Full Pressing snapshot, Pressing/Release admin capability IDs, edition, supply, cap, and distributor types |
+| `PressingSharedEvent` | Full post-configuration Pressing snapshot at sharing |
+| `PressingDistributorAuthorizedEvent<Distributor>` | Pressing configuration, Distributor type, authorization transition, and set counts |
+| `PressingDistributorRevokedEvent<Distributor>` | Pressing configuration, Distributor type, revocation transition, and set counts |
+| `RecordPurchasedEvent<Distributor, Currency>` | Full Record purchase provenance, supply transition, cap, and generic Distributor/Currency tags |
+| `RecordDestroyedEvent` | Full stored Record provenance at destruction |
+
+`RecordCreatedEvent`, `DistributorAuthorizedEvent`, and
+`DistributorRevokedEvent` remain declared with their historical payloads for
+source compatibility, but are dormant and never emitted.
 
 ## Layout
 

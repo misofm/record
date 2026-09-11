@@ -97,22 +97,11 @@ fun authorized_distributor_mints_a_self_describing_extensible_record() {
     assert_eq!(pressing.distributors().length(), 1);
     assert_eq!(object::id_address(&r), record::derive_address(pressing_id, 1));
 
-    let mut created_events = event::events_by_type<record::RecordCreatedEvent>();
-    assert_eq!(created_events.length(), 1);
-    let (
-        created_record_id,
-        created_release_id,
-        created_pressing_id,
-        created_edition,
-        created_number,
-    ) = record::created_event_fields(created_events.pop_back());
-    assert_eq!(created_record_id, object::id(&r));
-    assert_eq!(created_release_id, release_id);
-    assert_eq!(created_pressing_id, pressing_id);
-    assert_eq!(created_edition, 2);
-    assert_eq!(created_number, 1);
+    // Record creation is intentionally audited only by the rich purchase event.
+    assert_eq!(event::events_by_type<record::RecordCreatedEvent>().length(), 0);
 
-    let mut purchased_events = event::events_by_type<pressing::RecordPurchasedEvent>();
+    let mut purchased_events =
+        event::events_by_type<pressing::RecordPurchasedEvent<DemoDistributor, USD>>();
     assert_eq!(purchased_events.length(), 1);
     let (
         event_record_id,
@@ -125,17 +114,21 @@ fun authorized_distributor_mints_a_self_describing_extensible_record() {
         event_purchased_by,
         event_purchased_timestamp_ms,
         distributor,
+        _,
+        _,
+        _,
+        _,
     ) = pressing::purchased_event_fields(purchased_events.pop_back());
-    assert_eq!(event_record_id, object::id(&r));
-    assert_eq!(event_release_id, release_id);
-    assert_eq!(event_pressing_id, pressing_id);
+    assert_eq!(event_record_id, object::id(&r).to_address());
+    assert_eq!(event_release_id, release_id.to_address());
+    assert_eq!(event_pressing_id, pressing_id.to_address());
     assert_eq!(edition, 2);
     assert_eq!(number, 1);
-    assert_eq!(event_purchase_currency, type_name::with_defining_ids<USD>());
+    assert_eq!(event_purchase_currency, type_name::with_defining_ids<USD>().into_string());
     assert_eq!(event_purchase_price, purchase_price);
     assert_eq!(event_purchased_by, @0xA);
     assert_eq!(event_purchased_timestamp_ms, purchased_timestamp_ms);
-    assert_eq!(distributor, type_name::with_defining_ids<DemoDistributor>());
+    assert_eq!(distributor, type_name::with_defining_ids<DemoDistributor>().into_string());
 
     df::add(r.uid_mut(), DemoKey(), b"extension");
     assert!(df::exists(r.uid(), DemoKey()));
@@ -145,10 +138,20 @@ fun authorized_distributor_mints_a_self_describing_extensible_record() {
     r.destroy();
     let mut destroyed_events = event::events_by_type<record::RecordDestroyedEvent>();
     assert_eq!(destroyed_events.length(), 1);
-    let (event_record_id, event_pressing_id) =
+    let (
+        event_record_id,
+        _,
+        event_pressing_id,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+    ) =
         record::destroyed_event_fields(destroyed_events.pop_back());
-    assert_eq!(event_record_id, record_id);
-    assert_eq!(event_pressing_id, pressing_id);
+    assert_eq!(event_record_id, record_id.to_address());
+    assert_eq!(event_pressing_id, pressing_id.to_address());
 
     destroy(pressing);
     destroy(admin_cap);
@@ -212,10 +215,27 @@ fun distributor_replacement_continues_the_pressing_sequence() {
     assert!(!pressing.is_distributor_authorized<DemoDistributor>());
     assert!(pressing.is_distributor_authorized<ReplacementDistributor>());
 
-    let authorized = event::events_by_type<pressing::DistributorAuthorizedEvent>();
-    assert_eq!(authorized.length(), 2);
-    let revoked = event::events_by_type<pressing::DistributorRevokedEvent>();
+    let mut authorized =
+        event::events_by_type<pressing::PressingDistributorAuthorizedEvent<DemoDistributor>>();
+    assert_eq!(authorized.length(), 1);
+    let (_, _, _, _, _, _, _, _, _) =
+        pressing::pressing_distributor_authorized_event_fields(authorized.pop_back());
+
+    let mut replacement_authorized = event::events_by_type<
+        pressing::PressingDistributorAuthorizedEvent<ReplacementDistributor>,
+    >();
+    assert_eq!(replacement_authorized.length(), 1);
+    let (_, _, _, _, _, _, _, _, _) =
+        pressing::pressing_distributor_authorized_event_fields(replacement_authorized.pop_back());
+
+    let mut revoked = event::events_by_type<
+        pressing::PressingDistributorRevokedEvent<DemoDistributor>,
+    >();
     assert_eq!(revoked.length(), 1);
+    let (_, _, _, _, _, _, _, _, _) =
+        pressing::pressing_distributor_revoked_event_fields(revoked.pop_back());
+    assert_eq!(event::events_by_type<pressing::DistributorAuthorizedEvent>().length(), 0);
+    assert_eq!(event::events_by_type<pressing::DistributorRevokedEvent>().length(), 0);
 
     first.destroy();
     second.destroy();
@@ -316,10 +336,19 @@ fun release_derives_one_pressing_per_edition() {
 
     let created = event::events_by_type<pressing::PressingCreatedEvent>();
     assert_eq!(created.length(), 2);
-    let (pressing_id, event_release_id, edition, max_supply) =
+    let (
+        pressing_id,
+        event_release_id,
+        _,
+        _,
+        edition,
+        _,
+        max_supply,
+        _,
+    ) =
         pressing::created_event_fields(created[1]);
-    assert_eq!(pressing_id, object::id(&second));
-    assert_eq!(event_release_id, release_id);
+    assert_eq!(pressing_id, object::id(&second).to_address());
+    assert_eq!(event_release_id, release_id.to_address());
     assert_eq!(edition, 2);
     assert_eq!(max_supply, option::some(500));
 
@@ -430,6 +459,7 @@ fun pressing_supports_extensions_before_becoming_shared() {
 
     destroy(admin_cap);
     pressing.share();
+    assert_eq!(event::events_by_type<pressing::PressingSharedEvent>().length(), 1);
 
     scenario.next_tx(@0xB);
     let pressing = scenario.take_shared<Pressing>();

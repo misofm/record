@@ -12,6 +12,7 @@ module record::pressing;
 
 use musicos::release::{Release, ReleaseAdminCap};
 use record::record::{Self, Record};
+use std::ascii::String;
 use std::type_name::{Self, TypeName};
 use sui::{clock::Clock, derived_object, event::emit, vec_set::{Self, VecSet}};
 
@@ -50,18 +51,32 @@ public struct PressingAdminCap has key, store {
 // === Events ===
 
 /// Emitted when an artist creates a Pressing for a release edition.
+///
+/// The payload is a complete snapshot of the newly-created Pressing and both
+/// capabilities involved in deriving it. `distributors` is represented as
+/// defining type names so an indexer does not need to fetch the object to
+/// reconstruct its initial configuration.
 public struct PressingCreatedEvent has copy, drop {
     /// The newly created Pressing.
-    pressing_id: ID,
+    pressing_id: address,
     /// The parent release.
-    release_id: ID,
+    release_id: address,
+    /// The Pressing's admin capability.
+    pressing_admin_cap_id: address,
+    /// The Release admin capability used to create this Pressing.
+    release_admin_cap_id: address,
     /// The Pressing's edition number.
     edition: u16,
+    /// The number of Records issued by this Pressing.
+    supply: u32,
     /// The immutable supply ceiling, if one exists.
     max_supply: Option<u32>,
+    /// Defining type names of distributors currently permitted to mint.
+    distributors: vector<String>,
 }
 
-/// Emitted when a Pressing permits a distributor witness type to mint.
+/// Legacy event declaration retained for source compatibility. New code should
+/// consume `PressingDistributorAuthorizedEvent`.
 public struct DistributorAuthorizedEvent has copy, drop {
     /// The configured Pressing.
     pressing_id: ID,
@@ -69,7 +84,8 @@ public struct DistributorAuthorizedEvent has copy, drop {
     distributor: TypeName,
 }
 
-/// Emitted when a Pressing removes a distributor witness type.
+/// Legacy event declaration retained for source compatibility. New code should
+/// consume `PressingDistributorRevokedEvent`.
 public struct DistributorRevokedEvent has copy, drop {
     /// The configured Pressing.
     pressing_id: ID,
@@ -77,20 +93,20 @@ public struct DistributorRevokedEvent has copy, drop {
     distributor: TypeName,
 }
 
-/// Emitted by a Pressing after an authorized distributor purchases a Record.
-public struct RecordPurchasedEvent has copy, drop {
+/// Emitted after a Pressing mints a Record for an authorized distributor.
+public struct RecordPurchasedEvent<phantom Distributor: drop, phantom Currency> has copy, drop {
     /// The purchased Record.
-    record_id: ID,
+    record_id: address,
     /// The release represented by the Record.
-    release_id: ID,
+    release_id: address,
     /// The Pressing that issued the Record.
-    pressing_id: ID,
+    pressing_id: address,
     /// The edition represented by the Pressing.
     edition: u16,
     /// The Record's number within its edition.
     number: u32,
     /// The defining type of the purchase currency.
-    purchase_currency: TypeName,
+    purchase_currency: String,
     /// The amount paid for the Record.
     purchase_price: u64,
     /// The transaction sender who purchased the Record.
@@ -98,7 +114,52 @@ public struct RecordPurchasedEvent has copy, drop {
     /// The purchase time in Unix milliseconds from Sui's Clock.
     purchased_timestamp_ms: u64,
     /// The defining type of the distributor that authorized the mint.
-    distributor: TypeName,
+    distributor: String,
+    /// Supply immediately before this mint.
+    supply_before: u32,
+    /// Supply delta applied by this mint.
+    supply_delta: u32,
+    /// Supply immediately after this mint.
+    supply_after: u32,
+    /// The immutable supply ceiling, if one exists.
+    max_supply: Option<u32>,
+}
+
+/// Emitted after a Pressing is shared, with a complete post-configuration
+/// snapshot captured before ownership is consumed by the framework.
+public struct PressingSharedEvent has copy, drop {
+    pressing_id: address,
+    release_id: address,
+    edition: u16,
+    supply: u32,
+    max_supply: Option<u32>,
+    distributors: vector<String>,
+}
+
+/// Emitted when a distributor witness type is newly authorized for an edition.
+public struct PressingDistributorAuthorizedEvent<phantom Distributor: drop> has copy, drop {
+    pressing_id: address,
+    release_id: address,
+    edition: u16,
+    pressing_admin_cap_id: address,
+    distributor: String,
+    authorized_before: bool,
+    authorized_after: bool,
+    distributor_count_before: u64,
+    distributor_count_after: u64,
+}
+
+/// Emitted when a distributor witness type is removed from an edition.
+public struct PressingDistributorRevokedEvent<phantom Distributor: drop> has copy, drop {
+    pressing_id: address,
+    release_id: address,
+    edition: u16,
+    pressing_admin_cap_id: address,
+    distributor: String,
+    authorized_before: bool,
+    authorized_after: bool,
+    distributor_count_before: u64,
+    distributor_count_after: u64,
 }
 
 // === Errors ===
@@ -138,29 +199,48 @@ public fun new(
         pressing_id,
     };
 
-    emit(PressingCreatedEvent {
-        pressing_id,
+    let pressing = Pressing {
+        id,
         release_id,
         edition,
+        supply: 0,
         max_supply,
+        distributors: vec_set::empty(),
+    };
+
+    emit(PressingCreatedEvent {
+        pressing_id: pressing_id.to_address(),
+        release_id: release_id.to_address(),
+        pressing_admin_cap_id: object::id_address(&admin_cap),
+        release_admin_cap_id: object::id_address(release_cap),
+        edition: pressing.edition,
+        supply: pressing.supply,
+        max_supply: pressing.max_supply,
+        distributors: distributor_names(&pressing),
     });
 
-    (
-        Pressing {
-            id,
-            release_id,
-            edition,
-            supply: 0,
-            max_supply,
-            distributors: vec_set::empty(),
-        },
-        admin_cap,
-    )
+    (pressing, admin_cap)
 }
 
 /// Share a newly created Pressing after configuring its distributors.
 public fun share(self: Pressing) {
+    let pressing_id = object::id(&self).to_address();
+    let release_id = self.release_id.to_address();
+    let edition = self.edition;
+    let supply = self.supply;
+    let max_supply = self.max_supply;
+    let distributors = distributor_names(&self);
+
     transfer::share_object(self);
+
+    emit(PressingSharedEvent {
+        pressing_id,
+        release_id,
+        edition,
+        supply,
+        max_supply,
+        distributors,
+    });
 }
 
 /// Authorize distributor witness type `Distributor` for this edition.
@@ -172,10 +252,24 @@ public fun authorize_distributor<Distributor: drop>(
     self.authorize(cap);
     let distributor = type_name::with_defining_ids<Distributor>();
     if (!self.distributors.contains(&distributor)) {
+        let pressing_id = self.id.to_inner().to_address();
+        let release_id = self.release_id.to_address();
+        let edition = self.edition;
+        let pressing_admin_cap_id = object::id_address(cap);
+        let distributor_name = distributor.into_string();
+        let distributor_count_before = self.distributors.length();
+        let authorized_before = false;
         self.distributors.insert(distributor);
-        emit(DistributorAuthorizedEvent {
-            pressing_id: self.id.to_inner(),
-            distributor,
+        emit(PressingDistributorAuthorizedEvent<Distributor> {
+            pressing_id,
+            release_id,
+            edition,
+            pressing_admin_cap_id,
+            distributor: distributor_name,
+            authorized_before,
+            authorized_after: true,
+            distributor_count_before,
+            distributor_count_after: self.distributors.length(),
         });
     };
 }
@@ -189,10 +283,24 @@ public fun revoke_distributor<Distributor: drop>(
     self.authorize(cap);
     let distributor = type_name::with_defining_ids<Distributor>();
     if (self.distributors.contains(&distributor)) {
+        let pressing_id = self.id.to_inner().to_address();
+        let release_id = self.release_id.to_address();
+        let edition = self.edition;
+        let pressing_admin_cap_id = object::id_address(cap);
+        let distributor_name = distributor.into_string();
+        let distributor_count_before = self.distributors.length();
+        let authorized_before = true;
         self.distributors.remove(&distributor);
-        emit(DistributorRevokedEvent {
-            pressing_id: self.id.to_inner(),
-            distributor,
+        emit(PressingDistributorRevokedEvent<Distributor> {
+            pressing_id,
+            release_id,
+            edition,
+            pressing_admin_cap_id,
+            distributor: distributor_name,
+            authorized_before,
+            authorized_after: false,
+            distributor_count_before,
+            distributor_count_after: self.distributors.length(),
         });
     };
 }
@@ -213,6 +321,8 @@ public fun mint<Distributor: drop, Currency>(
     assert!(purchase_price > 0, EInvalidPurchasePrice);
     self.max_supply.do_ref!(|max| assert!(self.supply < *max, EMaxSupplyReached));
 
+    let supply_before = self.supply;
+    let max_supply = self.max_supply;
     self.supply = self.supply + 1;
     let purchased = record::new<Currency>(
         &mut self.id,
@@ -223,17 +333,21 @@ public fun mint<Distributor: drop, Currency>(
         clock,
         ctx,
     );
-    emit(RecordPurchasedEvent {
-        record_id: object::id(&purchased),
-        release_id: purchased.release_id(),
-        pressing_id: purchased.pressing_id(),
+    emit(RecordPurchasedEvent<Distributor, Currency> {
+        record_id: object::id(&purchased).to_address(),
+        release_id: purchased.release_id().to_address(),
+        pressing_id: purchased.pressing_id().to_address(),
         edition: purchased.edition(),
         number: purchased.number(),
-        purchase_currency: purchased.purchase_currency(),
+        purchase_currency: purchased.purchase_currency().into_string(),
         purchase_price: purchased.purchase_price(),
         purchased_by: purchased.purchased_by(),
         purchased_timestamp_ms: purchased.purchased_timestamp_ms(),
-        distributor: type_name::with_defining_ids<Distributor>(),
+        distributor: type_name::with_defining_ids<Distributor>().into_string(),
+        supply_before,
+        supply_delta: 1,
+        supply_after: self.supply,
+        max_supply,
     });
     purchased
 }
@@ -301,6 +415,15 @@ public fun derive_admin_cap_address(pressing_id: ID): address {
 
 // === Private Functions ===
 
+/// Convert the current distributor set into its defining type-name strings in
+/// VecSet insertion order. Event payloads use strings so they remain directly
+/// indexable without requiring a TypeName decoder.
+fun distributor_names(self: &Pressing): vector<String> {
+    let mut names = vector[];
+    self.distributors.keys().do_ref!(|distributor| names.push_back((*distributor).into_string()));
+    names
+}
+
 fun authorize(self: &Pressing, cap: &PressingAdminCap) {
     assert!(cap.pressing_id == self.id.to_inner(), EUnauthorized);
 }
@@ -344,9 +467,29 @@ public fun foreign_admin_cap_for_testing(
 }
 
 #[test_only]
-public fun created_event_fields(event: PressingCreatedEvent): (ID, ID, u16, Option<u32>) {
-    let PressingCreatedEvent { pressing_id, release_id, edition, max_supply } = event;
-    (pressing_id, release_id, edition, max_supply)
+public fun created_event_fields(
+    event: PressingCreatedEvent,
+): (address, address, address, address, u16, u32, Option<u32>, vector<String>) {
+    let PressingCreatedEvent {
+        pressing_id,
+        release_id,
+        pressing_admin_cap_id,
+        release_admin_cap_id,
+        edition,
+        supply,
+        max_supply,
+        distributors,
+    } = event;
+    (
+        pressing_id,
+        release_id,
+        pressing_admin_cap_id,
+        release_admin_cap_id,
+        edition,
+        supply,
+        max_supply,
+        distributors,
+    )
 }
 
 #[test_only]
@@ -364,9 +507,97 @@ public fun distributor_revoked_event_fields(event: DistributorRevokedEvent): (ID
 }
 
 #[test_only]
-public fun purchased_event_fields(
-    event: RecordPurchasedEvent,
-): (ID, ID, ID, u16, u32, TypeName, u64, address, u64, TypeName) {
+public fun shared_event_fields(
+    event: PressingSharedEvent,
+): (address, address, u16, u32, Option<u32>, vector<String>) {
+    let PressingSharedEvent {
+        pressing_id,
+        release_id,
+        edition,
+        supply,
+        max_supply,
+        distributors,
+    } = event;
+    (pressing_id, release_id, edition, supply, max_supply, distributors)
+}
+
+#[test_only]
+public fun pressing_distributor_authorized_event_fields<Distributor: drop>(
+    event: PressingDistributorAuthorizedEvent<Distributor>,
+): (address, address, u16, address, String, bool, bool, u64, u64) {
+    let PressingDistributorAuthorizedEvent {
+        pressing_id,
+        release_id,
+        edition,
+        pressing_admin_cap_id,
+        distributor,
+        authorized_before,
+        authorized_after,
+        distributor_count_before,
+        distributor_count_after,
+    } = event;
+    (
+        pressing_id,
+        release_id,
+        edition,
+        pressing_admin_cap_id,
+        distributor,
+        authorized_before,
+        authorized_after,
+        distributor_count_before,
+        distributor_count_after,
+    )
+}
+
+#[test_only]
+public fun pressing_distributor_revoked_event_fields<Distributor: drop>(
+    event: PressingDistributorRevokedEvent<Distributor>,
+): (address, address, u16, address, String, bool, bool, u64, u64) {
+    let PressingDistributorRevokedEvent {
+        pressing_id,
+        release_id,
+        edition,
+        pressing_admin_cap_id,
+        distributor,
+        authorized_before,
+        authorized_after,
+        distributor_count_before,
+        distributor_count_after,
+    } = event;
+    (
+        pressing_id,
+        release_id,
+        edition,
+        pressing_admin_cap_id,
+        distributor,
+        authorized_before,
+        authorized_after,
+        distributor_count_before,
+        distributor_count_after,
+    )
+}
+
+/// Short aliases for the rich Distributor transition accessors. The longer
+/// names above make the event family explicit; these aliases keep test callers
+/// ergonomic while remaining test-only API.
+#[test_only]
+public fun authorized_event_fields<Distributor: drop>(
+    event: PressingDistributorAuthorizedEvent<Distributor>,
+): (address, address, u16, address, String, bool, bool, u64, u64) {
+    pressing_distributor_authorized_event_fields(event)
+}
+
+#[test_only]
+public fun revoked_event_fields<Distributor: drop>(
+    event: PressingDistributorRevokedEvent<Distributor>,
+): (address, address, u16, address, String, bool, bool, u64, u64) {
+    pressing_distributor_revoked_event_fields(event)
+}
+
+#[test_only]
+public fun purchased_event_fields<Distributor: drop, Currency>(
+    event: RecordPurchasedEvent<Distributor, Currency>,
+): (address, address, address, u16, u32, String, u64, address, u64, String, u32, u32, u32, Option<u32>) {
     let RecordPurchasedEvent {
         record_id,
         release_id,
@@ -378,6 +609,10 @@ public fun purchased_event_fields(
         purchased_by,
         purchased_timestamp_ms,
         distributor,
+        supply_before,
+        supply_delta,
+        supply_after,
+        max_supply,
     } = event;
     (
         record_id,
@@ -390,5 +625,9 @@ public fun purchased_event_fields(
         purchased_by,
         purchased_timestamp_ms,
         distributor,
+        supply_before,
+        supply_delta,
+        supply_after,
+        max_supply,
     )
 }

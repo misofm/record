@@ -9,7 +9,7 @@
 module record::record;
 
 use std::type_name::{Self, TypeName};
-use sui::{clock::Clock, derived_object, event::emit};
+use sui::{clock::Clock, derived_object};
 
 // === Structs ===
 
@@ -39,7 +39,8 @@ public struct RecordKey(u32) has copy, drop, store;
 
 // === Events ===
 
-/// Emitted when a Pressing creates a Record.
+/// Legacy event declaration retained for source compatibility. Record minting
+/// is audited by `pressing::RecordPurchasedEvent`; this event is dormant.
 public struct RecordCreatedEvent has copy, drop {
     /// The newly created Record.
     record_id: ID,
@@ -56,9 +57,23 @@ public struct RecordCreatedEvent has copy, drop {
 /// Emitted when an owner permanently destroys a Record.
 public struct RecordDestroyedEvent has copy, drop {
     /// The destroyed Record.
-    record_id: ID,
+    record_id: address,
+    /// The release represented by the Record.
+    release_id: address,
     /// The Pressing that issued the Record.
-    pressing_id: ID,
+    pressing_id: address,
+    /// The edition represented by the Pressing.
+    edition: u16,
+    /// The Record's number within its edition.
+    number: u32,
+    /// The defining type of the purchase currency.
+    purchase_currency: std::ascii::String,
+    /// The amount paid for the Record.
+    purchase_price: u64,
+    /// The transaction sender who purchased the Record.
+    purchased_by: address,
+    /// When this Record was purchased, in Unix milliseconds from Sui's Clock.
+    purchased_timestamp_ms: u64,
 }
 
 // === Package Functions ===
@@ -93,14 +108,6 @@ public(package) fun new<Currency>(
         purchased_timestamp_ms,
     };
 
-    emit(RecordCreatedEvent {
-        record_id: object::id(&record),
-        release_id,
-        pressing_id,
-        edition,
-        number,
-    });
-
     record
 }
 
@@ -109,10 +116,33 @@ public(package) fun new<Currency>(
 /// Destroy a Record. Detach any dynamic-field extensions first or they become
 /// inaccessible.
 public fun destroy(self: Record) {
-    let record_id = object::id(&self);
-    let Record { id, pressing_id, .. } = self;
+    let record_id = object::id(&self).to_address();
+    let Record {
+        id,
+        release_id,
+        pressing_id,
+        edition,
+        number,
+        purchase_currency,
+        purchase_price,
+        purchased_by,
+        purchased_timestamp_ms,
+    } = self;
+    let release_id = release_id.to_address();
+    let pressing_id = pressing_id.to_address();
+    let purchase_currency = purchase_currency.into_string();
     id.delete();
-    emit(RecordDestroyedEvent { record_id, pressing_id });
+    sui::event::emit(RecordDestroyedEvent {
+        record_id,
+        release_id,
+        pressing_id,
+        edition,
+        number,
+        purchase_currency,
+        purchase_price,
+        purchased_by,
+        purchased_timestamp_ms,
+    });
 }
 
 // === Extension Access ===
@@ -197,7 +227,29 @@ public fun created_event_fields(
 }
 
 #[test_only]
-public fun destroyed_event_fields(event: RecordDestroyedEvent): (ID, ID) {
-    let RecordDestroyedEvent { record_id, pressing_id } = event;
-    (record_id, pressing_id)
+public fun destroyed_event_fields(
+    event: RecordDestroyedEvent,
+): (address, address, address, u16, u32, std::ascii::String, u64, address, u64) {
+    let RecordDestroyedEvent {
+        record_id,
+        release_id,
+        pressing_id,
+        edition,
+        number,
+        purchase_currency,
+        purchase_price,
+        purchased_by,
+        purchased_timestamp_ms,
+    } = event;
+    (
+        record_id,
+        release_id,
+        pressing_id,
+        edition,
+        number,
+        purchase_currency,
+        purchase_price,
+        purchased_by,
+        purchased_timestamp_ms,
+    )
 }
