@@ -94,6 +94,8 @@ public struct DistributorRevokedEvent has copy, drop {
 }
 
 /// Emitted after a Pressing mints a Record for an authorized distributor.
+/// `Distributor` and `Currency` identify the concrete purchase without
+/// duplicating their names in the serialized payload.
 public struct RecordPurchasedEvent<phantom Distributor: drop, phantom Currency> has copy, drop {
     /// The purchased Record.
     record_id: address,
@@ -105,16 +107,12 @@ public struct RecordPurchasedEvent<phantom Distributor: drop, phantom Currency> 
     edition: u16,
     /// The Record's number within its edition.
     number: u32,
-    /// The defining type of the purchase currency.
-    purchase_currency: String,
     /// The amount paid for the Record.
     purchase_price: u64,
     /// The transaction sender who purchased the Record.
     purchased_by: address,
     /// The purchase time in Unix milliseconds from Sui's Clock.
     purchased_timestamp_ms: u64,
-    /// The defining type of the distributor that authorized the mint.
-    distributor: String,
     /// Supply immediately before this mint.
     supply_before: u32,
     /// Supply delta applied by this mint.
@@ -142,7 +140,6 @@ public struct PressingDistributorAuthorizedEvent<phantom Distributor: drop> has 
     release_id: address,
     edition: u16,
     pressing_admin_cap_id: address,
-    distributor: String,
     authorized_before: bool,
     authorized_after: bool,
     distributor_count_before: u64,
@@ -155,7 +152,6 @@ public struct PressingDistributorRevokedEvent<phantom Distributor: drop> has cop
     release_id: address,
     edition: u16,
     pressing_admin_cap_id: address,
-    distributor: String,
     authorized_before: bool,
     authorized_after: bool,
     distributor_count_before: u64,
@@ -256,7 +252,6 @@ public fun authorize_distributor<Distributor: drop>(
         let release_id = self.release_id.to_address();
         let edition = self.edition;
         let pressing_admin_cap_id = object::id_address(cap);
-        let distributor_name = distributor.into_string();
         let distributor_count_before = self.distributors.length();
         let authorized_before = false;
         self.distributors.insert(distributor);
@@ -265,7 +260,6 @@ public fun authorize_distributor<Distributor: drop>(
             release_id,
             edition,
             pressing_admin_cap_id,
-            distributor: distributor_name,
             authorized_before,
             authorized_after: true,
             distributor_count_before,
@@ -287,7 +281,6 @@ public fun revoke_distributor<Distributor: drop>(
         let release_id = self.release_id.to_address();
         let edition = self.edition;
         let pressing_admin_cap_id = object::id_address(cap);
-        let distributor_name = distributor.into_string();
         let distributor_count_before = self.distributors.length();
         let authorized_before = true;
         self.distributors.remove(&distributor);
@@ -296,7 +289,6 @@ public fun revoke_distributor<Distributor: drop>(
             release_id,
             edition,
             pressing_admin_cap_id,
-            distributor: distributor_name,
             authorized_before,
             authorized_after: false,
             distributor_count_before,
@@ -339,11 +331,9 @@ public fun mint<Distributor: drop, Currency>(
         pressing_id: purchased.pressing_id().to_address(),
         edition: purchased.edition(),
         number: purchased.number(),
-        purchase_currency: purchased.purchase_currency().into_string(),
         purchase_price: purchased.purchase_price(),
         purchased_by: purchased.purchased_by(),
         purchased_timestamp_ms: purchased.purchased_timestamp_ms(),
-        distributor: type_name::with_defining_ids<Distributor>().into_string(),
         supply_before,
         supply_delta: 1,
         supply_after: self.supply,
@@ -524,13 +514,12 @@ public fun shared_event_fields(
 #[test_only]
 public fun pressing_distributor_authorized_event_fields<Distributor: drop>(
     event: PressingDistributorAuthorizedEvent<Distributor>,
-): (address, address, u16, address, String, bool, bool, u64, u64) {
+): (address, address, u16, address, bool, bool, u64, u64) {
     let PressingDistributorAuthorizedEvent {
         pressing_id,
         release_id,
         edition,
         pressing_admin_cap_id,
-        distributor,
         authorized_before,
         authorized_after,
         distributor_count_before,
@@ -541,7 +530,6 @@ public fun pressing_distributor_authorized_event_fields<Distributor: drop>(
         release_id,
         edition,
         pressing_admin_cap_id,
-        distributor,
         authorized_before,
         authorized_after,
         distributor_count_before,
@@ -552,13 +540,12 @@ public fun pressing_distributor_authorized_event_fields<Distributor: drop>(
 #[test_only]
 public fun pressing_distributor_revoked_event_fields<Distributor: drop>(
     event: PressingDistributorRevokedEvent<Distributor>,
-): (address, address, u16, address, String, bool, bool, u64, u64) {
+): (address, address, u16, address, bool, bool, u64, u64) {
     let PressingDistributorRevokedEvent {
         pressing_id,
         release_id,
         edition,
         pressing_admin_cap_id,
-        distributor,
         authorized_before,
         authorized_after,
         distributor_count_before,
@@ -569,7 +556,6 @@ public fun pressing_distributor_revoked_event_fields<Distributor: drop>(
         release_id,
         edition,
         pressing_admin_cap_id,
-        distributor,
         authorized_before,
         authorized_after,
         distributor_count_before,
@@ -583,32 +569,30 @@ public fun pressing_distributor_revoked_event_fields<Distributor: drop>(
 #[test_only]
 public fun authorized_event_fields<Distributor: drop>(
     event: PressingDistributorAuthorizedEvent<Distributor>,
-): (address, address, u16, address, String, bool, bool, u64, u64) {
+): (address, address, u16, address, bool, bool, u64, u64) {
     pressing_distributor_authorized_event_fields(event)
 }
 
 #[test_only]
 public fun revoked_event_fields<Distributor: drop>(
     event: PressingDistributorRevokedEvent<Distributor>,
-): (address, address, u16, address, String, bool, bool, u64, u64) {
+): (address, address, u16, address, bool, bool, u64, u64) {
     pressing_distributor_revoked_event_fields(event)
 }
 
 #[test_only]
 public fun purchased_event_fields<Distributor: drop, Currency>(
     event: RecordPurchasedEvent<Distributor, Currency>,
-): (address, address, address, u16, u32, String, u64, address, u64, String, u32, u32, u32, Option<u32>) {
+): (address, address, address, u16, u32, u64, address, u64, u32, u32, u32, Option<u32>) {
     let RecordPurchasedEvent {
         record_id,
         release_id,
         pressing_id,
         edition,
         number,
-        purchase_currency,
         purchase_price,
         purchased_by,
         purchased_timestamp_ms,
-        distributor,
         supply_before,
         supply_delta,
         supply_after,
@@ -620,11 +604,9 @@ public fun purchased_event_fields<Distributor: drop, Currency>(
         pressing_id,
         edition,
         number,
-        purchase_currency,
         purchase_price,
         purchased_by,
         purchased_timestamp_ms,
-        distributor,
         supply_before,
         supply_delta,
         supply_after,

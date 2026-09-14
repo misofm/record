@@ -53,7 +53,9 @@ findings.**
   from the actual Pressing; number comes from its counter; Record ID uses that number;
   currency comes from the concrete type; buyer comes from `TxContext`; and purchase
   time comes from `Clock`. The authorized Distributor supplies the positive price
-  after validating payment. Distributor type remains event-only audit provenance.
+  after validating payment. Distributor and Currency are carried by the purchase
+  event's phantom type parameters; runtime strings remain only where events
+  intentionally snapshot heterogeneous state.
 - **Distributor storage is intentionally small and inline.** `VecSet` gives simple
   duplicate-free membership. Its O(n) behavior is appropriate for a handful of
   issuance paths; it is not intended as an unbounded registry.

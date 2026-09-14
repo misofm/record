@@ -109,11 +109,9 @@ fun authorized_distributor_mints_a_self_describing_extensible_record() {
         event_pressing_id,
         edition,
         number,
-        event_purchase_currency,
         event_purchase_price,
         event_purchased_by,
         event_purchased_timestamp_ms,
-        distributor,
         _,
         _,
         _,
@@ -124,11 +122,9 @@ fun authorized_distributor_mints_a_self_describing_extensible_record() {
     assert_eq!(event_pressing_id, pressing_id.to_address());
     assert_eq!(edition, 2);
     assert_eq!(number, 1);
-    assert_eq!(event_purchase_currency, type_name::with_defining_ids<USD>().into_string());
     assert_eq!(event_purchase_price, purchase_price);
     assert_eq!(event_purchased_by, @0xA);
     assert_eq!(event_purchased_timestamp_ms, purchased_timestamp_ms);
-    assert_eq!(distributor, type_name::with_defining_ids<DemoDistributor>().into_string());
 
     df::add(r.uid_mut(), DemoKey(), b"extension");
     assert!(df::exists(r.uid(), DemoKey()));
@@ -218,21 +214,21 @@ fun distributor_replacement_continues_the_pressing_sequence() {
     let mut authorized =
         event::events_by_type<pressing::PressingDistributorAuthorizedEvent<DemoDistributor>>();
     assert_eq!(authorized.length(), 1);
-    let (_, _, _, _, _, _, _, _, _) =
+    let (_, _, _, _, _, _, _, _) =
         pressing::pressing_distributor_authorized_event_fields(authorized.pop_back());
 
     let mut replacement_authorized = event::events_by_type<
         pressing::PressingDistributorAuthorizedEvent<ReplacementDistributor>,
     >();
     assert_eq!(replacement_authorized.length(), 1);
-    let (_, _, _, _, _, _, _, _, _) =
+    let (_, _, _, _, _, _, _, _) =
         pressing::pressing_distributor_authorized_event_fields(replacement_authorized.pop_back());
 
     let mut revoked = event::events_by_type<
         pressing::PressingDistributorRevokedEvent<DemoDistributor>,
     >();
     assert_eq!(revoked.length(), 1);
-    let (_, _, _, _, _, _, _, _, _) =
+    let (_, _, _, _, _, _, _, _) =
         pressing::pressing_distributor_revoked_event_fields(revoked.pop_back());
     assert_eq!(event::events_by_type<pressing::DistributorAuthorizedEvent>().length(), 0);
     assert_eq!(event::events_by_type<pressing::DistributorRevokedEvent>().length(), 0);

@@ -16,7 +16,8 @@
 - [x] Support immutable `Option<u32>` maximum supply.
 - [x] Authorize multiple Distributor witness types per Pressing with `VecSet`.
 - [x] Add idempotent Distributor authorization and revocation.
-- [x] Keep Distributor type in `pressing::RecordPurchasedEvent`, not in Record storage.
+- [x] Encode Distributor and Currency as phantom parameters in the emitted
+      purchase event, rather than duplicating their names as payload strings.
 - [x] Remove the singleton Registry, Table, Settings, and package initializer.
 - [x] Keep Record extension UID access, explicit destruction, and framework
       `public_*` ownership operations.

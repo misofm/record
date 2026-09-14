@@ -114,8 +114,10 @@ public fun purchase<Currency>(
 to deliver it through any composable transaction flow. The Distributor validates
 payment and sale state; `record` stores the resulting purchase provenance.
 
-The witness type is written to `pressing::RecordPurchasedEvent` for audit and indexing but is not
-stored on every Record.
+The `Distributor` and `Currency` types are carried by the concrete
+`pressing::RecordPurchasedEvent<Distributor, Currency>` event type. They are
+not duplicated as serialized strings in that payload; `Currency` remains part
+of the Record's stored purchase provenance.
 
 ## Stored lifecycle data
 
@@ -165,14 +167,19 @@ become inaccessible.
 |---|---|
 | `PressingCreatedEvent` | Full Pressing snapshot, Pressing/Release admin capability IDs, edition, supply, cap, and distributor types |
 | `PressingSharedEvent` | Full post-configuration Pressing snapshot at sharing |
-| `PressingDistributorAuthorizedEvent<Distributor>` | Pressing configuration, Distributor type, authorization transition, and set counts |
-| `PressingDistributorRevokedEvent<Distributor>` | Pressing configuration, Distributor type, revocation transition, and set counts |
-| `RecordPurchasedEvent<Distributor, Currency>` | Full Record purchase provenance, supply transition, cap, and generic Distributor/Currency tags |
+| `PressingDistributorAuthorizedEvent<Distributor>` | Pressing configuration, authorization transition, and set counts; Distributor is a phantom type parameter |
+| `PressingDistributorRevokedEvent<Distributor>` | Pressing configuration, revocation transition, and set counts; Distributor is a phantom type parameter |
+| `RecordPurchasedEvent<Distributor, Currency>` | Full Record purchase provenance, supply transition, and cap; Distributor and Currency are phantom type parameters |
 | `RecordDestroyedEvent` | Full stored Record provenance at destruction |
 
 `RecordCreatedEvent`, `DistributorAuthorizedEvent`, and
 `DistributorRevokedEvent` remain declared with their historical payloads for
 source compatibility, but are dormant and never emitted.
+
+The runtime `String` snapshots in `PressingCreatedEvent`, `PressingSharedEvent`,
+and `RecordDestroyedEvent` remain because those events represent heterogeneous
+state snapshots or destruction of a non-generic `Record`; no single concrete
+type parameter is available to encode those values.
 
 ## Layout
 

@@ -94,18 +94,17 @@ fun distributor_events_capture_only_real_set_changes() {
     let mut r = event::events_by_type<pressing::PressingDistributorRevokedEvent<Distributor>>();
     assert_eq!(a.length(), 1);
     assert_eq!(r.length(), 1);
-    let (pid, rid, edition, cap_id, name, before, after, count_before, count_after) =
+    let (pid, rid, edition, cap_id, before, after, count_before, count_after) =
         pressing::authorized_event_fields(a.pop_back());
     assert_eq!(pid, object::id(&p).to_address());
     assert_eq!(rid, @0xBEEF);
     assert_eq!(edition, 1);
     assert_eq!(cap_id, object::id(&cap).to_address());
-    assert_eq!(name, type_name::with_defining_ids<Distributor>().into_string());
     assert!(!before);
     assert!(after);
     assert_eq!(count_before, 0);
     assert_eq!(count_after, 1);
-    let (_, _, _, _, _, before, after, count_before, count_after) =
+    let (_, _, _, _, before, after, count_before, count_after) =
         pressing::revoked_event_fields(r.pop_back());
     assert!(before);
     assert!(!after);
