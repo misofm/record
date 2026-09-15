@@ -39,21 +39,6 @@ public struct RecordKey(u32) has copy, drop, store;
 
 // === Events ===
 
-/// Legacy event declaration retained for source compatibility. Record minting
-/// is audited by `pressing::RecordPurchasedEvent`; this event is dormant.
-public struct RecordCreatedEvent has copy, drop {
-    /// The newly created Record.
-    record_id: ID,
-    /// The release represented by the Record.
-    release_id: ID,
-    /// The Pressing that issued the Record.
-    pressing_id: ID,
-    /// The edition represented by the Pressing.
-    edition: u16,
-    /// The Record's number within the edition.
-    number: u32,
-}
-
 /// Emitted when an owner permanently destroys a Record.
 public struct RecordDestroyedEvent has copy, drop {
     /// The destroyed Record.
@@ -205,26 +190,6 @@ public fun derive_address(pressing_id: ID, number: u32): address {
 }
 
 // === Test Functions ===
-
-#[test_only]
-public fun created_event_fields(
-    event: RecordCreatedEvent,
-): (ID, ID, ID, u16, u32) {
-    let RecordCreatedEvent {
-        record_id,
-        release_id,
-        pressing_id,
-        edition,
-        number,
-    } = event;
-    (
-        record_id,
-        release_id,
-        pressing_id,
-        edition,
-        number,
-    )
-}
 
 #[test_only]
 public fun destroyed_event_fields(
