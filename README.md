@@ -172,10 +172,6 @@ become inaccessible.
 | `RecordPurchasedEvent<Distributor, Currency>` | Full Record purchase provenance, supply transition, and cap; Distributor and Currency are phantom type parameters |
 | `RecordDestroyedEvent` | Full stored Record provenance at destruction |
 
-`RecordCreatedEvent`, `DistributorAuthorizedEvent`, and
-`DistributorRevokedEvent` remain declared with their historical payloads for
-source compatibility, but are dormant and never emitted.
-
 The runtime `String` snapshots in `PressingCreatedEvent`, `PressingSharedEvent`,
 and `RecordDestroyedEvent` remain because those events represent heterogeneous
 state snapshots or destruction of a non-generic `Record`; no single concrete

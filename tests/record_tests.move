@@ -97,9 +97,6 @@ fun authorized_distributor_mints_a_self_describing_extensible_record() {
     assert_eq!(pressing.distributors().length(), 1);
     assert_eq!(object::id_address(&r), record::derive_address(pressing_id, 1));
 
-    // Record creation is intentionally audited only by the rich purchase event.
-    assert_eq!(event::events_by_type<record::RecordCreatedEvent>().length(), 0);
-
     let mut purchased_events =
         event::events_by_type<pressing::RecordPurchasedEvent<DemoDistributor, USD>>();
     assert_eq!(purchased_events.length(), 1);
@@ -230,8 +227,6 @@ fun distributor_replacement_continues_the_pressing_sequence() {
     assert_eq!(revoked.length(), 1);
     let (_, _, _, _, _, _, _, _) =
         pressing::pressing_distributor_revoked_event_fields(revoked.pop_back());
-    assert_eq!(event::events_by_type<pressing::DistributorAuthorizedEvent>().length(), 0);
-    assert_eq!(event::events_by_type<pressing::DistributorRevokedEvent>().length(), 0);
 
     first.destroy();
     second.destroy();

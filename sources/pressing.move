@@ -75,24 +75,6 @@ public struct PressingCreatedEvent has copy, drop {
     distributors: vector<String>,
 }
 
-/// Legacy event declaration retained for source compatibility. New code should
-/// consume `PressingDistributorAuthorizedEvent`.
-public struct DistributorAuthorizedEvent has copy, drop {
-    /// The configured Pressing.
-    pressing_id: ID,
-    /// The authorized distributor's defining type.
-    distributor: TypeName,
-}
-
-/// Legacy event declaration retained for source compatibility. New code should
-/// consume `PressingDistributorRevokedEvent`.
-public struct DistributorRevokedEvent has copy, drop {
-    /// The configured Pressing.
-    pressing_id: ID,
-    /// The revoked distributor's defining type.
-    distributor: TypeName,
-}
-
 /// Emitted after a Pressing mints a Record for an authorized distributor.
 /// `Distributor` and `Currency` identify the concrete purchase without
 /// duplicating their names in the serialized payload.
@@ -480,20 +462,6 @@ public fun created_event_fields(
         max_supply,
         distributors,
     )
-}
-
-#[test_only]
-public fun distributor_authorized_event_fields(
-    event: DistributorAuthorizedEvent,
-): (ID, TypeName) {
-    let DistributorAuthorizedEvent { pressing_id, distributor } = event;
-    (pressing_id, distributor)
-}
-
-#[test_only]
-public fun distributor_revoked_event_fields(event: DistributorRevokedEvent): (ID, TypeName) {
-    let DistributorRevokedEvent { pressing_id, distributor } = event;
-    (pressing_id, distributor)
 }
 
 #[test_only]

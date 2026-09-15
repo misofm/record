@@ -110,8 +110,6 @@ fun distributor_events_capture_only_real_set_changes() {
     assert!(!after);
     assert_eq!(count_before, 1);
     assert_eq!(count_after, 0);
-    assert_eq!(event::events_by_type<pressing::DistributorAuthorizedEvent>().length(), 0);
-    assert_eq!(event::events_by_type<pressing::DistributorRevokedEvent>().length(), 0);
     destroy(p);
     destroy(cap);
 }
@@ -137,7 +135,6 @@ fun view_and_uid_borrows_are_event_silent() {
     let _ = r.purchased_by();
     let _ = r.purchased_timestamp_ms();
     let _ = r.uid();
-    assert_eq!(event::events_by_type<record::RecordCreatedEvent>().length(), 0);
     assert_eq!(event::events_by_type<pressing::RecordPurchasedEvent<Distributor, USD>>().length(), 1);
     r.destroy();
     destroy(p);
