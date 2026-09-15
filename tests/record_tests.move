@@ -449,8 +449,9 @@ fun pressing_supports_extensions_before_becoming_shared() {
     let _: vector<u8> = df::remove(pressing.uid_mut(&admin_cap), DemoKey());
 
     destroy(admin_cap);
+    let event_count = event::num_events();
     pressing.share();
-    assert_eq!(event::events_by_type<pressing::PressingSharedEvent>().length(), 1);
+    assert_eq!(event::num_events(), event_count);
 
     scenario.next_tx(@0xB);
     let pressing = scenario.take_shared<Pressing>();
