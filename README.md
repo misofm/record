@@ -200,7 +200,7 @@ sui move test
 
 This architecture changes the Record layout and mint API, adds Pressing, and removes
 Registry and Settings. It therefore requires a fresh publication. Distributor,
-Seal-policy, SDK, and application consumers must migrate to Pressing IDs and
-edition-local Record numbers.
+SDK, and application consumers must migrate to Pressing IDs and edition-local
+Record numbers.
 
 License: Apache-2.0
