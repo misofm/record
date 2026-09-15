@@ -119,7 +119,7 @@ fun view_and_uid_borrows_are_event_silent() {
     let mut c = tx_context::dummy();
     let (mut p, cap) = pressing::new_for_testing(ident(@0xBEEF), 1, option::none(), &mut c);
     p.authorize_distributor<Distributor>(&cap);
-    let mut r = mint(&mut p, 3, 0, &mut c);
+    let r = mint(&mut p, 3, 0, &mut c);
     let _ = p.release_id();
     let _ = p.edition();
     let _ = p.supply();
