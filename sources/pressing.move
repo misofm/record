@@ -105,17 +105,6 @@ public struct RecordPurchasedEvent<phantom Distributor: drop, phantom Currency> 
     max_supply: Option<u32>,
 }
 
-/// Emitted after a Pressing is shared, with a complete post-configuration
-/// snapshot captured before ownership is consumed by the framework.
-public struct PressingSharedEvent has copy, drop {
-    pressing_id: address,
-    release_id: address,
-    edition: u16,
-    supply: u32,
-    max_supply: Option<u32>,
-    distributors: vector<String>,
-}
-
 /// Emitted when a distributor witness type is newly authorized for an edition.
 public struct PressingDistributorAuthorizedEvent<phantom Distributor: drop> has copy, drop {
     pressing_id: address,
@@ -202,23 +191,7 @@ public fun new(
 
 /// Share a newly created Pressing after configuring its distributors.
 public fun share(self: Pressing) {
-    let pressing_id = object::id(&self).to_address();
-    let release_id = self.release_id.to_address();
-    let edition = self.edition;
-    let supply = self.supply;
-    let max_supply = self.max_supply;
-    let distributors = distributor_names(&self);
-
     transfer::share_object(self);
-
-    emit(PressingSharedEvent {
-        pressing_id,
-        release_id,
-        edition,
-        supply,
-        max_supply,
-        distributors,
-    });
 }
 
 /// Authorize distributor witness type `Distributor` for this edition.
@@ -462,21 +435,6 @@ public fun created_event_fields(
         max_supply,
         distributors,
     )
-}
-
-#[test_only]
-public fun shared_event_fields(
-    event: PressingSharedEvent,
-): (address, address, u16, u32, Option<u32>, vector<String>) {
-    let PressingSharedEvent {
-        pressing_id,
-        release_id,
-        edition,
-        supply,
-        max_supply,
-        distributors,
-    } = event;
-    (pressing_id, release_id, edition, supply, max_supply, distributors)
 }
 
 #[test_only]

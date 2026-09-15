@@ -7,7 +7,6 @@ module record::rich_event_tests_a;
 use musicos::release::{Self, Release, ReleaseAdminCap};
 use record::pressing::{Self, Pressing};
 use record::record::{Self, Record};
-use std::type_name;
 use std::unit_test::{assert_eq, destroy};
 use sui::clock;
 use sui::event;
@@ -61,24 +60,29 @@ fun creation_event_is_a_complete_snapshot() {
 }
 
 #[test]
-fun share_event_captures_config_and_supply() {
-    let mut c = tx_context::new_from_hint(@0xA, 0, 0, 0, 0);
-    let (mut p, cap) = pressing::new_for_testing(ident(@0xBEEF), 2, option::none(), &mut c);
-    let p_id = object::id(&p).to_address();
+fun sharing_is_silent_and_preserves_config_and_supply() {
+    let mut scenario = sui::test_scenario::begin(@0xA);
+    let (mut p, cap) = pressing::new_for_testing(ident(@0xBEEF), 2, option::none(), scenario.ctx());
+    let p_id = object::id(&p);
     p.authorize_distributor<Distributor>(&cap);
-    let r = mint(&mut p, 9, 42, &mut c);
+    let r = mint(&mut p, 9, 42, scenario.ctx());
     r.destroy();
+    let event_count = event::num_events();
     p.share();
-    let mut events = event::events_by_type<pressing::PressingSharedEvent>();
-    assert_eq!(events.length(), 1);
-    let (pid, rid, edition, supply, max, distributors) = pressing::shared_event_fields(events.pop_back());
-    assert_eq!(pid, p_id);
-    assert_eq!(rid, @0xBEEF);
-    assert_eq!(edition, 2);
-    assert_eq!(supply, 1);
-    assert_eq!(max, option::none());
-    assert_eq!(distributors, vector[type_name::with_defining_ids<Distributor>().into_string()]);
+    assert_eq!(event::num_events(), event_count);
     destroy(cap);
+
+    scenario.next_tx(@0xB);
+    let p = scenario.take_shared<Pressing>();
+    assert_eq!(object::id(&p), p_id);
+    assert_eq!(p.release_id(), ident(@0xBEEF));
+    assert_eq!(p.edition(), 2);
+    assert_eq!(p.supply(), 1);
+    assert_eq!(p.max_supply(), option::none());
+    assert!(p.is_distributor_authorized<Distributor>());
+    assert_eq!(p.distributors().length(), 1);
+    sui::test_scenario::return_shared(p);
+    scenario.end();
 }
 
 #[test]
