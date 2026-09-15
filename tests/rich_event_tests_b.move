@@ -38,8 +38,8 @@ fun purchase_event_is_separated_by_currency_type() {
     let mut c = tx_context::new_from_hint(@0xA, 0, 0, 0, 0);
     let (mut p, cap) = pressing::new_for_testing(id(@0xBEEF), 1, option::none(), &mut c);
     p.authorize_distributor<Distributor>(&cap);
-    let mut usd = mint<USD>(&mut p, 5, 10, &mut c);
-    let mut eur = mint<EUR>(&mut p, 7, 20, &mut c);
+    let usd = mint<USD>(&mut p, 5, 10, &mut c);
+    let eur = mint<EUR>(&mut p, 7, 20, &mut c);
     let mut ue = event::events_by_type<pressing::RecordPurchasedEvent<Distributor, USD>>();
     let mut ee = event::events_by_type<pressing::RecordPurchasedEvent<Distributor, EUR>>();
     assert_eq!(ue.length(), 1);
@@ -71,12 +71,12 @@ fun capped_supply_is_lifetime_supply_after_destruction() {
     let mut c = tx_context::dummy();
     let (mut p, cap) = pressing::new_for_testing(id(@0xBEEF), 1, option::some(2), &mut c);
     p.authorize_distributor<Distributor>(&cap);
-    let mut first = mint<USD>(&mut p, 1, 0, &mut c);
+    let first = mint<USD>(&mut p, 1, 0, &mut c);
     first.destroy();
     let second = mint<USD>(&mut p, 1, 0, &mut c);
     assert_eq!(p.supply(), 2);
     assert_eq!(second.number(), 2);
-    let mut events = event::events_by_type<pressing::RecordPurchasedEvent<Distributor, USD>>();
+    let events = event::events_by_type<pressing::RecordPurchasedEvent<Distributor, USD>>();
     assert_eq!(events.length(), 2);
     let (_, _, _, _, number, _, _, _, before, delta, after, max) =
         pressing::purchased_event_fields(events[1]);
@@ -100,7 +100,7 @@ fun destruction_event_keeps_original_purchase_provenance() {
     destroy(cap);
     transfer::public_transfer(r, @0xB);
     s.next_tx(@0xB);
-    let mut r = s.take_from_sender<Record>();
+    let r = s.take_from_sender<Record>();
     r.destroy();
     let mut events = event::events_by_type<record::RecordDestroyedEvent>();
     assert_eq!(events.length(), 1);
