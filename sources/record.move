@@ -51,14 +51,6 @@ public struct RecordDestroyedEvent has copy, drop {
     edition: u16,
     /// The Record's number within its edition.
     number: u32,
-    /// The defining type of the purchase currency.
-    purchase_currency: std::ascii::String,
-    /// The amount paid for the Record.
-    purchase_price: u64,
-    /// The transaction sender who purchased the Record.
-    purchased_by: address,
-    /// When this Record was purchased, in Unix milliseconds from Sui's Clock.
-    purchased_timestamp_ms: u64,
 }
 
 // === Package Functions ===
@@ -108,14 +100,13 @@ public fun destroy(self: Record) {
         pressing_id,
         edition,
         number,
-        purchase_currency,
-        purchase_price,
-        purchased_by,
-        purchased_timestamp_ms,
+        purchase_currency: _,
+        purchase_price: _,
+        purchased_by: _,
+        purchased_timestamp_ms: _,
     } = self;
     let release_id = release_id.to_address();
     let pressing_id = pressing_id.to_address();
-    let purchase_currency = purchase_currency.into_string();
     id.delete();
     sui::event::emit(RecordDestroyedEvent {
         record_id,
@@ -123,10 +114,6 @@ public fun destroy(self: Record) {
         pressing_id,
         edition,
         number,
-        purchase_currency,
-        purchase_price,
-        purchased_by,
-        purchased_timestamp_ms,
     });
 }
 
@@ -194,27 +181,13 @@ public fun derive_address(pressing_id: ID, number: u32): address {
 #[test_only]
 public fun destroyed_event_fields(
     event: RecordDestroyedEvent,
-): (address, address, address, u16, u32, std::ascii::String, u64, address, u64) {
+): (address, address, address, u16, u32) {
     let RecordDestroyedEvent {
         record_id,
         release_id,
         pressing_id,
         edition,
         number,
-        purchase_currency,
-        purchase_price,
-        purchased_by,
-        purchased_timestamp_ms,
     } = event;
-    (
-        record_id,
-        release_id,
-        pressing_id,
-        edition,
-        number,
-        purchase_currency,
-        purchase_price,
-        purchased_by,
-        purchased_timestamp_ms,
-    )
+    (record_id, release_id, pressing_id, edition, number)
 }

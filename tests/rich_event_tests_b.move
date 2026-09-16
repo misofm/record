@@ -6,7 +6,6 @@ module record::rich_event_tests_b;
 
 use record::pressing::{Self, Pressing};
 use record::record::{Self, Record};
-use std::type_name;
 use std::unit_test::{assert_eq, destroy};
 use sui::clock;
 use sui::event;
@@ -91,7 +90,7 @@ fun capped_supply_is_lifetime_supply_after_destruction() {
 }
 
 #[test]
-fun destruction_event_keeps_original_purchase_provenance() {
+fun destruction_event_identifies_only_destroyed_record() {
     let mut s = ts::begin(@0xA);
     let (mut p, cap) = pressing::new_for_testing(id(@0xBEEF), 1, 100, s.ctx());
     p.authorize_distributor<Distributor>(&cap);
@@ -104,12 +103,15 @@ fun destruction_event_keeps_original_purchase_provenance() {
     r.destroy();
     let mut events = event::events_by_type<record::RecordDestroyedEvent>();
     assert_eq!(events.length(), 1);
-    let (_, _, _, _, _, currency, price, buyer, time) =
-        record::destroyed_event_fields(events.pop_back());
-    assert_eq!(currency, type_name::with_defining_ids<USD>().into_string());
-    assert_eq!(price, 11);
-    assert_eq!(buyer, @0xA);
-    assert_eq!(time, 99);
+    let event = events.pop_back();
+    assert_eq!(std::bcs::to_bytes(&event).length(), 102);
+    let (record_id, release_id, pressing_id, edition, number) =
+        record::destroyed_event_fields(event);
+    assert!(record_id != @0x0);
+    assert_eq!(release_id, @0xBEEF);
+    assert!(pressing_id != @0x0);
+    assert_eq!(edition, 1);
+    assert_eq!(number, 1);
     s.end();
 }
 

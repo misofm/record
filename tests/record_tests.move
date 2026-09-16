@@ -131,18 +131,11 @@ fun authorized_distributor_mints_a_self_describing_extensible_record() {
     r.destroy();
     let mut destroyed_events = event::events_by_type<record::RecordDestroyedEvent>();
     assert_eq!(destroyed_events.length(), 1);
-    let (
-        event_record_id,
-        _,
-        event_pressing_id,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-    ) =
-        record::destroyed_event_fields(destroyed_events.pop_back());
+    let destroyed_event = destroyed_events.pop_back();
+    // Three addresses, one u16 and one u32: no duplicated purchase provenance.
+    assert_eq!(std::bcs::to_bytes(&destroyed_event).length(), 102);
+    let (event_record_id, _, event_pressing_id, _, _) =
+        record::destroyed_event_fields(destroyed_event);
     assert_eq!(event_record_id, record_id.to_address());
     assert_eq!(event_pressing_id, pressing_id.to_address());
 
@@ -530,7 +523,7 @@ fun boundary_editions_preserve_record_and_event_provenance() {
         assert_eq!(event_edition, edition);
         r.destroy();
         let mut events = event::events_by_type<record::RecordDestroyedEvent>();
-        let (_, _, _, event_edition, _, _, _, _, _) =
+        let (_, _, _, event_edition, _) =
             record::destroyed_event_fields(events.pop_back());
         assert_eq!(event_edition, edition);
         destroy(p);

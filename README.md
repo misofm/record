@@ -172,16 +172,17 @@ become inaccessible.
 | `PressingDistributorAuthorizedEvent<Distributor>` | Pressing configuration, authorization transition, and set counts; Distributor is a phantom type parameter |
 | `PressingDistributorRevokedEvent<Distributor>` | Pressing configuration, revocation transition, and set counts; Distributor is a phantom type parameter |
 | `RecordPurchasedEvent<Distributor, Currency>` | Full Record purchase provenance, supply transition, and cap; Distributor and Currency are phantom type parameters |
-| `RecordDestroyedEvent` | Full stored Record provenance at destruction |
+| `RecordDestroyedEvent` | Destroyed Record, Release and Pressing IDs plus edition and number |
 
 Pressing construction emits Created once with initial state and capability provenance.
 Sharing is silent; distributor changes and purchases retain their own events,
 including changes made before sharing.
 
-The runtime `String` snapshots in `PressingCreatedEvent` and
-`RecordDestroyedEvent` remain because those events represent heterogeneous
-state snapshots or destruction of a non-generic `Record`; no single concrete
-type parameter is available to encode those values.
+The runtime `String` snapshot in `PressingCreatedEvent` remains because its
+distributor list may contain heterogeneous defining types. Destruction is
+nongeneric and intentionally omits the Record's historical purchase fields;
+consumers can join `RecordPurchasedEvent` by Record ID when that provenance is
+needed.
 
 ## Layout
 
