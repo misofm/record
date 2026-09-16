@@ -40,7 +40,7 @@ fun creation_event_is_a_complete_snapshot() {
     let mut c = tx_context::new_from_hint(@0xA, 0, 0, 0, 0);
     let (mut rel, rel_cap) = release(&mut c);
     let rel_id = object::id(&rel);
-    let (p, p_cap) = pressing::new(&mut rel, &rel_cap, 7, option::some(12));
+    let (p, p_cap) = pressing::new(&mut rel, &rel_cap, 1, 12);
     let mut events = event::events_by_type<pressing::PressingCreatedEvent>();
     assert_eq!(events.length(), 1);
     let (pid, rid, pcap, rcap, edition, supply, max, distributors) =
@@ -49,9 +49,9 @@ fun creation_event_is_a_complete_snapshot() {
     assert_eq!(rid, rel_id.to_address());
     assert_eq!(pcap, object::id(&p_cap).to_address());
     assert_eq!(rcap, object::id(&rel_cap).to_address());
-    assert_eq!(edition, 7);
+    assert_eq!(edition, 1);
     assert_eq!(supply, 0);
-    assert_eq!(max, option::some(12));
+    assert_eq!(max, 12);
     assert_eq!(distributors, vector[]);
     destroy(p);
     destroy(p_cap);
@@ -62,7 +62,7 @@ fun creation_event_is_a_complete_snapshot() {
 #[test]
 fun sharing_is_silent_and_preserves_config_and_supply() {
     let mut scenario = sui::test_scenario::begin(@0xA);
-    let (mut p, cap) = pressing::new_for_testing(ident(@0xBEEF), 2, option::none(), scenario.ctx());
+    let (mut p, cap) = pressing::new_for_testing(ident(@0xBEEF), 2, 100, scenario.ctx());
     let p_id = object::id(&p);
     p.authorize_distributor<Distributor>(&cap);
     let r = mint(&mut p, 9, 42, scenario.ctx());
@@ -78,7 +78,7 @@ fun sharing_is_silent_and_preserves_config_and_supply() {
     assert_eq!(p.release_id(), ident(@0xBEEF));
     assert_eq!(p.edition(), 2);
     assert_eq!(p.supply(), 1);
-    assert_eq!(p.max_supply(), option::none());
+    assert_eq!(p.max_supply(), 100);
     assert!(p.is_distributor_authorized<Distributor>());
     assert_eq!(p.distributors().length(), 1);
     sui::test_scenario::return_shared(p);
@@ -88,7 +88,7 @@ fun sharing_is_silent_and_preserves_config_and_supply() {
 #[test]
 fun distributor_events_capture_only_real_set_changes() {
     let mut c = tx_context::dummy();
-    let (mut p, cap) = pressing::new_for_testing(ident(@0xBEEF), 1, option::none(), &mut c);
+    let (mut p, cap) = pressing::new_for_testing(ident(@0xBEEF), 1, 100, &mut c);
     p.authorize_distributor<Distributor>(&cap);
     p.authorize_distributor<Distributor>(&cap);
     p.revoke_distributor<Distributor>(&cap);
@@ -121,7 +121,7 @@ fun distributor_events_capture_only_real_set_changes() {
 #[test]
 fun view_and_uid_borrows_are_event_silent() {
     let mut c = tx_context::dummy();
-    let (mut p, cap) = pressing::new_for_testing(ident(@0xBEEF), 1, option::none(), &mut c);
+    let (mut p, cap) = pressing::new_for_testing(ident(@0xBEEF), 1, 100, &mut c);
     p.authorize_distributor<Distributor>(&cap);
     let r = mint(&mut p, 3, 0, &mut c);
     let _ = p.release_id();

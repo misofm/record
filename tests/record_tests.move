@@ -69,7 +69,7 @@ fun authorized_distributor_mints_a_self_describing_extensible_record() {
     let mut ctx = tx_context::new_from_hint(@0xA, 0, 0, 0, 0);
     let release_id = id(@0xBEEF);
     let (mut pressing, admin_cap) =
-        pressing::new_for_testing(release_id, 2, option::none(), &mut ctx);
+        pressing::new_for_testing(release_id, 2, 100, &mut ctx);
     pressing.authorize_distributor<DemoDistributor>(&admin_cap);
     let pressing_id = object::id(&pressing);
     let purchase_price = 25;
@@ -92,7 +92,7 @@ fun authorized_distributor_mints_a_self_describing_extensible_record() {
     assert_eq!(r.purchased_by(), @0xA);
     assert_eq!(r.purchased_timestamp_ms(), purchased_timestamp_ms);
     assert_eq!(pressing.supply(), 1);
-    assert_eq!(pressing.max_supply(), option::none());
+    assert_eq!(pressing.max_supply(), 100);
     assert!(pressing.is_distributor_authorized<DemoDistributor>());
     assert_eq!(pressing.distributors().length(), 1);
     assert_eq!(object::id_address(&r), record::derive_address(pressing_id, 1));
@@ -155,9 +155,9 @@ fun pressings_allocate_edition_local_sequences() {
     let mut ctx = tx_context::dummy();
     let release_id = id(@0xCAFE);
     let (mut first_pressing, first_cap) =
-        pressing::new_for_testing(release_id, 1, option::none(), &mut ctx);
+        pressing::new_for_testing(release_id, 1, 100, &mut ctx);
     let (mut second_pressing, second_cap) =
-        pressing::new_for_testing(release_id, 2, option::none(), &mut ctx);
+        pressing::new_for_testing(release_id, 2, 100, &mut ctx);
     first_pressing.authorize_distributor<DemoDistributor>(&first_cap);
     second_pressing.authorize_distributor<DemoDistributor>(&second_cap);
 
@@ -189,7 +189,7 @@ fun pressings_allocate_edition_local_sequences() {
 fun distributor_replacement_continues_the_pressing_sequence() {
     let mut ctx = tx_context::dummy();
     let (mut pressing, admin_cap) =
-        pressing::new_for_testing(id(@0xCAFE), 1, option::none(), &mut ctx);
+        pressing::new_for_testing(id(@0xCAFE), 1, 100, &mut ctx);
 
     pressing.authorize_distributor<DemoDistributor>(&admin_cap);
     pressing.authorize_distributor<DemoDistributor>(&admin_cap);
@@ -242,7 +242,7 @@ fun distributor_replacement_continues_the_pressing_sequence() {
 fun unauthorized_distributor_cannot_mint() {
     let mut ctx = tx_context::dummy();
     let (mut pressing, admin_cap) =
-        pressing::new_for_testing(id(@0xBEEF), 1, option::none(), &mut ctx);
+        pressing::new_for_testing(id(@0xBEEF), 1, 100, &mut ctx);
     let record = mint_record(&mut pressing, impostor_distributor(), 1, 0, &mut ctx);
     record.destroy();
     destroy(pressing);
@@ -256,7 +256,7 @@ fun unauthorized_distributor_cannot_mint() {
 fun revoked_distributor_cannot_mint() {
     let mut ctx = tx_context::dummy();
     let (mut pressing, admin_cap) =
-        pressing::new_for_testing(id(@0xBEEF), 1, option::none(), &mut ctx);
+        pressing::new_for_testing(id(@0xBEEF), 1, 100, &mut ctx);
     pressing.authorize_distributor<DemoDistributor>(&admin_cap);
     pressing.revoke_distributor<DemoDistributor>(&admin_cap);
     let record = mint_record(&mut pressing, demo_distributor(), 1, 0, &mut ctx);
@@ -269,7 +269,7 @@ fun revoked_distributor_cannot_mint() {
 fun capped_pressing_rejects_the_next_record_after_its_maximum() {
     let mut ctx = tx_context::dummy();
     let (mut pressing, admin_cap) =
-        pressing::new_for_testing(id(@0xBEEF), 1, option::some(2), &mut ctx);
+        pressing::new_for_testing(id(@0xBEEF), 1, 2, &mut ctx);
     pressing.authorize_distributor<DemoDistributor>(&admin_cap);
     let first = mint_record(&mut pressing, demo_distributor(), 1, 0, &mut ctx);
     let second = mint_record(&mut pressing, demo_distributor(), 1, 0, &mut ctx);
@@ -285,7 +285,7 @@ fun capped_pressing_rejects_the_next_record_after_its_maximum() {
 fun authorized_distributor_cannot_purchase_a_zero_price_record() {
     let mut ctx = tx_context::dummy();
     let (mut pressing, admin_cap) =
-        pressing::new_for_testing(id(@0xBEEF), 1, option::none(), &mut ctx);
+        pressing::new_for_testing(id(@0xBEEF), 1, 100, &mut ctx);
     pressing.authorize_distributor<DemoDistributor>(&admin_cap);
     let record = mint_record(&mut pressing, demo_distributor(), 0, 0, &mut ctx);
     record.destroy();
@@ -303,13 +303,13 @@ fun release_derives_one_pressing_per_edition() {
         &mut release,
         &release_cap,
         1,
-        option::none(),
+        100,
     );
     let (second, second_cap) = pressing::new(
         &mut release,
         &release_cap,
         2,
-        option::some(500),
+        500,
     );
 
     assert_eq!(object::id_address(&first), pressing::derive_address(release_id, 1));
@@ -321,9 +321,9 @@ fun release_derives_one_pressing_per_edition() {
     assert_eq!(first_cap.pressing_id(), object::id(&first));
     assert_eq!(first.release_id(), release_id);
     assert_eq!(first.edition(), 1);
-    assert_eq!(first.max_supply(), option::none());
+    assert_eq!(first.max_supply(), 100);
     assert_eq!(second.edition(), 2);
-    assert_eq!(second.max_supply(), option::some(500));
+    assert_eq!(second.max_supply(), 500);
 
     let created = event::events_by_type<pressing::PressingCreatedEvent>();
     assert_eq!(created.length(), 2);
@@ -341,7 +341,7 @@ fun release_derives_one_pressing_per_edition() {
     assert_eq!(pressing_id, object::id(&second).to_address());
     assert_eq!(event_release_id, release_id.to_address());
     assert_eq!(edition, 2);
-    assert_eq!(max_supply, option::some(500));
+    assert_eq!(max_supply, 500);
 
     destroy(first);
     destroy(first_cap);
@@ -362,13 +362,13 @@ fun release_cannot_create_the_same_edition_twice() {
         &mut release,
         &release_cap,
         1,
-        option::none(),
+        100,
     );
     let (second, second_cap) = pressing::new(
         &mut release,
         &release_cap,
         1,
-        option::none(),
+        100,
     );
     destroy(first);
     destroy(first_cap);
@@ -382,7 +382,7 @@ fun release_cannot_create_the_same_edition_twice() {
 fun distributor_authorization_requires_the_matching_pressing_cap() {
     let mut ctx = tx_context::dummy();
     let (mut pressing, admin_cap) =
-        pressing::new_for_testing(id(@0xBEEF), 1, option::none(), &mut ctx);
+        pressing::new_for_testing(id(@0xBEEF), 1, 100, &mut ctx);
     let foreign_cap = pressing::foreign_admin_cap_for_testing(id(@0xDEAD), &mut ctx);
     pressing.authorize_distributor<DemoDistributor>(&foreign_cap);
     destroy(pressing);
@@ -395,7 +395,7 @@ fun edition_zero_is_rejected() {
     let mut ctx = tx_context::dummy();
     let (mut release, release_cap) = a_release(&mut ctx);
     let (pressing, pressing_cap) =
-        pressing::new(&mut release, &release_cap, 0, option::none());
+        pressing::new(&mut release, &release_cap, 0, 100);
     destroy(pressing);
     destroy(pressing_cap);
     destroy(release);
@@ -407,7 +407,7 @@ fun capped_pressing_rejects_zero_maximum() {
     let mut ctx = tx_context::dummy();
     let (mut release, release_cap) = a_release(&mut ctx);
     let (pressing, pressing_cap) =
-        pressing::new(&mut release, &release_cap, 1, option::some(0));
+        pressing::new(&mut release, &release_cap, 1, 0);
     destroy(pressing);
     destroy(pressing_cap);
     destroy(release);
@@ -418,7 +418,7 @@ fun capped_pressing_rejects_zero_maximum() {
 fun record_supports_framework_public_transfer() {
     let mut scenario = ts::begin(@0xA);
     let (mut pressing, admin_cap) =
-        pressing::new_for_testing(id(@0xBEEF), 1, option::none(), scenario.ctx());
+        pressing::new_for_testing(id(@0xBEEF), 1, 100, scenario.ctx());
     pressing.authorize_distributor<DemoDistributor>(&admin_cap);
     let record = mint_record(&mut pressing, demo_distributor(), 1, 0, scenario.ctx());
     let record_id = object::id(&record);
@@ -441,7 +441,7 @@ fun pressing_supports_extensions_before_becoming_shared() {
     let (mut pressing, admin_cap) = pressing::new_for_testing(
         id(@0xBEEF),
         1,
-        option::none(),
+        100,
         scenario.ctx(),
     );
     df::add(pressing.uid_mut(&admin_cap), DemoKey(), b"extension");
@@ -458,4 +458,93 @@ fun pressing_supports_extensions_before_becoming_shared() {
     assert_eq!(pressing.edition(), 1);
     ts::return_shared(pressing);
     scenario.end();
+}
+
+#[test, expected_failure(abort_code = pressing::EPreviousEditionMissing, location = pressing)]
+fun first_edition_cannot_be_skipped() {
+    let mut ctx = tx_context::dummy();
+    let (mut release, release_cap) = a_release(&mut ctx);
+    let (p, cap) = pressing::new(&mut release, &release_cap, 2, 10);
+    destroy(p);
+    destroy(cap);
+    destroy(release);
+    destroy(release_cap);
+}
+
+#[test, expected_failure(abort_code = pressing::EPreviousEditionMissing, location = pressing)]
+fun intermediate_edition_cannot_be_skipped() {
+    let mut ctx = tx_context::dummy();
+    let (mut release, release_cap) = a_release(&mut ctx);
+    let (first, cap) = pressing::new(&mut release, &release_cap, 1, 10);
+    destroy(first);
+    destroy(cap);
+    let (p, cap) = pressing::new(&mut release, &release_cap, 3, 10);
+    destroy(p);
+    destroy(cap);
+    destroy(release);
+    destroy(release_cap);
+}
+
+#[test, expected_failure(abort_code = pressing::EPreviousEditionMissing, location = pressing)]
+fun predecessor_must_belong_to_the_same_release() {
+    let mut ctx = tx_context::dummy();
+    let (mut first_release, first_release_cap) = a_release(&mut ctx);
+    let (p, cap) = pressing::new(&mut first_release, &first_release_cap, 1, 10);
+    destroy(p);
+    destroy(cap);
+    let (mut other_release, other_release_cap) = a_release(&mut ctx);
+    let (p, cap) = pressing::new(&mut other_release, &other_release_cap, 2, 10);
+    destroy(p);
+    destroy(cap);
+    destroy(first_release);
+    destroy(first_release_cap);
+    destroy(other_release);
+    destroy(other_release_cap);
+}
+
+#[test, expected_failure(abort_code = pressing::EMaxSupplyReached, location = pressing)]
+fun distributor_rotation_cannot_reset_the_supply_cap() {
+    let mut ctx = tx_context::dummy();
+    let (mut p, cap) = pressing::new_for_testing(id(@0xBEEF), 1, 1, &mut ctx);
+    p.authorize_distributor<DemoDistributor>(&cap);
+    mint_record(&mut p, demo_distributor(), 1, 0, &mut ctx).destroy();
+    p.revoke_distributor<DemoDistributor>(&cap);
+    p.authorize_distributor<ReplacementDistributor>(&cap);
+    mint_record(&mut p, replacement_distributor(), 1, 0, &mut ctx).destroy();
+    destroy(p);
+    destroy(cap);
+}
+
+#[test]
+fun boundary_editions_preserve_record_and_event_provenance() {
+    let mut ctx = tx_context::dummy();
+    vector[1u16, 65_535u16].do!(|edition| {
+        let (mut p, cap) = pressing::new_for_testing(id(@0xBEEF), edition, 1, &mut ctx);
+        p.authorize_distributor<DemoDistributor>(&cap);
+        let r = mint_record(&mut p, demo_distributor(), 1, 0, &mut ctx);
+        assert_eq!(p.edition(), edition);
+        assert_eq!(r.edition(), edition);
+        let mut events = event::events_by_type<pressing::RecordPurchasedEvent<DemoDistributor, USD>>();
+        let (_, _, _, event_edition, _, _, _, _, _, _, _, _) =
+            pressing::purchased_event_fields(events.pop_back());
+        assert_eq!(event_edition, edition);
+        r.destroy();
+        let mut events = event::events_by_type<record::RecordDestroyedEvent>();
+        let (_, _, _, event_edition, _, _, _, _, _) =
+            record::destroyed_event_fields(events.pop_back());
+        assert_eq!(event_edition, edition);
+        destroy(p);
+        destroy(cap);
+    });
+}
+
+#[test, expected_failure(abort_code = pressing::EPreviousEditionMissing, location = pressing)]
+fun maximum_edition_still_requires_its_predecessor() {
+    let mut ctx = tx_context::dummy();
+    let (mut release, release_cap) = a_release(&mut ctx);
+    let (p, cap) = pressing::new(&mut release, &release_cap, 65_535, 1);
+    destroy(p);
+    destroy(cap);
+    destroy(release);
+    destroy(release_cap);
 }

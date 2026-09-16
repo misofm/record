@@ -1,5 +1,9 @@
 # Security Review — `record`
 
+> Historical review: the verdict below predates mandatory caps and sequential
+> edition creation. The current changes require a fresh review; see the README
+> and tests for the new invariants.
+
 **Revision:** working tree · **Date:** 2026-09-01 · **Toolchain:** Sui 1.78.1
 
 Review of edition-scoped Pressings, Distributor authorization, and composable

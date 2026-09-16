@@ -10,7 +10,7 @@ public struct Pressing has key {
     release_id: ID,
     edition: u16,
     supply: u32,
-    max_supply: Option<u32>,
+    max_supply: u32,
     distributors: VecSet<TypeName>,
 }
 
@@ -38,18 +38,21 @@ objects do not carry package-upgrade versions.
 
 Each Pressing is derived directly from its Release at `PressingKey(edition)`. The
 Release's `ReleaseAdminCap` authorizes creation, and claiming the same edition twice
-aborts:
+aborts. Editions must be created sequentially, starting at 1: for edition `n > 1`,
+the Release must already contain the derived claim for edition `n - 1`. This does
+not require that the previous edition has sold out or been shared.
 
 ```move
 let (mut pressing, pressing_cap) = pressing::new(
     release,
     release_cap,
     1,
-    option::some(500),
+    500,
 );
 ```
 
-Edition numbers and Record numbers start at 1. Every Pressing owns an independent
+Edition numbers are `u16` values from 1 through 65,535. Record numbers are `u32`
+values starting at 1. Every Pressing owns an independent
 Record sequence, so Edition 1 Record 1 and Edition 2 Record 1 are both valid and have
 different IDs.
 
@@ -70,9 +73,9 @@ Release
 
 `max_supply` is fixed when the Pressing is created:
 
-- `none()` creates an unlimited edition.
-- `some(quantity)` creates a permanently capped edition.
-- `some(0)` is invalid.
+`max_supply` is a required positive `u32`; zero is invalid. It caps lifetime
+issuance across all distributors and currencies. Destroying a Record does not
+restore mint capacity. Further issuance beyond the cap requires a new edition.
 
 The Pressing checks the cap before incrementing `supply`. Failed or unauthorized
 mints do not consume a number because the transaction rolls back atomically.
@@ -203,3 +206,8 @@ SDK, and application consumers must migrate to Pressing IDs and edition-local
 Record numbers.
 
 License: Apache-2.0
+
+Mandatory caps and sequential editions change the Pressing layout and public API.
+They require fresh publication and coordinated distributor, SDK, and event-decoder
+updates. Existing publications retain their original rules; derived edition
+namespaces are specific to the defining Record package.

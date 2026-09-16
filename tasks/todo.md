@@ -1,7 +1,7 @@
 # Edition-scoped Pressing and Record
 
 > **2026-09-01 — current direction.** `record` owns the Record lifecycle. Each
-> Release derives one Pressing per edition; each Pressing owns its supply, optional
+> Release derives one Pressing per edition; each Pressing owns its supply, mandatory immutable
 > maximum, Record namespace, and authorized Distributor witness types.
 
 ## Core
@@ -13,7 +13,8 @@
       price, buyer, and Clock-stamped purchase time on each Record.
 - [x] Derive Record UIDs from `(pressing_id, RecordKey(number))`.
 - [x] Track edition-local supply directly on the Pressing.
-- [x] Support immutable `Option<u32>` maximum supply.
+- [x] Require positive immutable `u32` maximum supply.
+- [x] Require the previous edition claim on the same Release before creating the next edition.
 - [x] Authorize multiple Distributor witness types per Pressing with `VecSet`.
 - [x] Add idempotent Distributor authorization and revocation.
 - [x] Encode Distributor and Currency as phantom parameters in the emitted

@@ -36,7 +36,7 @@ fun mint<C>(
 #[test]
 fun purchase_event_is_separated_by_currency_type() {
     let mut c = tx_context::new_from_hint(@0xA, 0, 0, 0, 0);
-    let (mut p, cap) = pressing::new_for_testing(id(@0xBEEF), 1, option::none(), &mut c);
+    let (mut p, cap) = pressing::new_for_testing(id(@0xBEEF), 1, 100, &mut c);
     p.authorize_distributor<Distributor>(&cap);
     let usd = mint<USD>(&mut p, 5, 10, &mut c);
     let eur = mint<EUR>(&mut p, 7, 20, &mut c);
@@ -52,7 +52,7 @@ fun purchase_event_is_separated_by_currency_type() {
     assert_eq!(before, 0);
     assert_eq!(delta, 1);
     assert_eq!(after, 1);
-    assert_eq!(max, option::none());
+    assert_eq!(max, 100);
     let (_, _, _, _, _, price, _, time, before, delta, after, _) =
         pressing::purchased_event_fields(ee.pop_back());
     assert_eq!(price, 7);
@@ -69,7 +69,7 @@ fun purchase_event_is_separated_by_currency_type() {
 #[test]
 fun capped_supply_is_lifetime_supply_after_destruction() {
     let mut c = tx_context::dummy();
-    let (mut p, cap) = pressing::new_for_testing(id(@0xBEEF), 1, option::some(2), &mut c);
+    let (mut p, cap) = pressing::new_for_testing(id(@0xBEEF), 1, 2, &mut c);
     p.authorize_distributor<Distributor>(&cap);
     let first = mint<USD>(&mut p, 1, 0, &mut c);
     first.destroy();
@@ -84,7 +84,7 @@ fun capped_supply_is_lifetime_supply_after_destruction() {
     assert_eq!(before, 1);
     assert_eq!(delta, 1);
     assert_eq!(after, 2);
-    assert_eq!(max, option::some(2));
+    assert_eq!(max, 2);
     second.destroy();
     destroy(p);
     destroy(cap);
@@ -93,7 +93,7 @@ fun capped_supply_is_lifetime_supply_after_destruction() {
 #[test]
 fun destruction_event_keeps_original_purchase_provenance() {
     let mut s = ts::begin(@0xA);
-    let (mut p, cap) = pressing::new_for_testing(id(@0xBEEF), 1, option::none(), s.ctx());
+    let (mut p, cap) = pressing::new_for_testing(id(@0xBEEF), 1, 100, s.ctx());
     p.authorize_distributor<Distributor>(&cap);
     let r = mint<USD>(&mut p, 11, 99, s.ctx());
     destroy(p);
@@ -116,7 +116,7 @@ fun destruction_event_keeps_original_purchase_provenance() {
 #[test, expected_failure(abort_code = pressing::EUnauthorized, location = pressing)]
 fun foreign_cap_reauthorize_still_aborts() {
     let mut c = tx_context::dummy();
-    let (mut p, cap) = pressing::new_for_testing(id(@0xBEEF), 1, option::none(), &mut c);
+    let (mut p, cap) = pressing::new_for_testing(id(@0xBEEF), 1, 100, &mut c);
     p.authorize_distributor<Distributor>(&cap);
     let foreign = pressing::foreign_admin_cap_for_testing(id(@0xDEAD), &mut c);
     p.authorize_distributor<Distributor>(&foreign);
@@ -128,7 +128,7 @@ fun foreign_cap_reauthorize_still_aborts() {
 #[test, expected_failure(abort_code = pressing::EUnauthorized, location = pressing)]
 fun foreign_cap_missing_revoke_still_aborts() {
     let mut c = tx_context::dummy();
-    let (mut p, cap) = pressing::new_for_testing(id(@0xBEEF), 1, option::none(), &mut c);
+    let (mut p, cap) = pressing::new_for_testing(id(@0xBEEF), 1, 100, &mut c);
     let foreign = pressing::foreign_admin_cap_for_testing(id(@0xDEAD), &mut c);
     p.revoke_distributor<Distributor>(&foreign);
     destroy(p);

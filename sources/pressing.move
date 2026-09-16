@@ -5,7 +5,7 @@
 /// Records.
 ///
 /// A release may have many Pressings, one at each `PressingKey(edition)`. Each
-/// Pressing owns an independent Record sequence, an optional immutable
+/// Pressing owns an independent Record sequence, an immutable
 /// maximum supply, and the set of distributor witness types allowed to mint from
 /// that edition. Distributors own delivery mechanics; the Pressing owns issuance.
 module record::pressing;
@@ -34,8 +34,8 @@ public struct Pressing has key {
     edition: u16,
     /// The number of Records issued by this Pressing.
     supply: u32,
-    /// The immutable supply ceiling, or `none()` for an uncapped Pressing.
-    max_supply: Option<u32>,
+    /// The positive, immutable lifetime issuance ceiling.
+    max_supply: u32,
     /// The defining types of distributors currently permitted to mint.
     distributors: VecSet<TypeName>,
 }
@@ -69,8 +69,8 @@ public struct PressingCreatedEvent has copy, drop {
     edition: u16,
     /// The number of Records issued by this Pressing.
     supply: u32,
-    /// The immutable supply ceiling, if one exists.
-    max_supply: Option<u32>,
+    /// The immutable lifetime issuance ceiling.
+    max_supply: u32,
     /// Defining type names of distributors currently permitted to mint.
     distributors: vector<String>,
 }
@@ -101,8 +101,8 @@ public struct RecordPurchasedEvent<phantom Distributor: drop, phantom Currency> 
     supply_delta: u32,
     /// Supply immediately after this mint.
     supply_after: u32,
-    /// The immutable supply ceiling, if one exists.
-    max_supply: Option<u32>,
+    /// The immutable lifetime issuance ceiling.
+    max_supply: u32,
 }
 
 /// Emitted when a distributor witness type is newly authorized for an edition.
@@ -137,29 +137,35 @@ const EInvalidMaxSupply: u64 = 2;
 const EDistributorNotAuthorized: u64 = 3;
 const EMaxSupplyReached: u64 = 4;
 const EInvalidPurchasePrice: u64 = 5;
+const EPreviousEditionMissing: u64 = 6;
 
 // === Public Functions ===
 
 /// Create one edition's Pressing under its Release.
 ///
-/// `max_supply = none()` creates an uncapped edition; `some(quantity)` creates a
-/// permanently capped edition. The Pressing and its
-/// admin capability are returned for composition before the caller shares the
+/// Editions start at 1 and must be created sequentially under this Release.
+/// `max_supply` must be positive and permanently caps lifetime issuance.
+/// The Pressing and its admin capability are returned for composition before
+/// the caller shares the
 /// Pressing and custodies the capability.
 public fun new(
     release: &mut Release,
     release_cap: &ReleaseAdminCap,
     edition: u16,
-    max_supply: Option<u32>,
+    max_supply: u32,
 ): (Pressing, PressingAdminCap) {
     assert!(edition > 0, EInvalidEdition);
-    max_supply.do_ref!(|max| assert!(*max > 0, EInvalidMaxSupply));
+    assert!(max_supply > 0, EInvalidMaxSupply);
 
     let release_id = object::id(release);
-    let mut id = derived_object::claim(
-        release.uid_mut(release_cap),
-        PressingKey(edition),
-    );
+    let release_uid = release.uid_mut(release_cap);
+    if (edition > 1) {
+        assert!(
+            derived_object::exists(release_uid, PressingKey(edition - 1)),
+            EPreviousEditionMissing,
+        );
+    };
+    let mut id = derived_object::claim(release_uid, PressingKey(edition));
     let pressing_id = id.to_inner();
     let admin_cap = PressingAdminCap {
         id: derived_object::claim(&mut id, PressingAdminCapKey()),
@@ -266,7 +272,7 @@ public fun mint<Distributor: drop, Currency>(
 ): Record {
     assert!(self.is_distributor_authorized<Distributor>(), EDistributorNotAuthorized);
     assert!(purchase_price > 0, EInvalidPurchasePrice);
-    self.max_supply.do_ref!(|max| assert!(self.supply < *max, EMaxSupplyReached));
+    assert!(self.supply < self.max_supply, EMaxSupplyReached);
 
     let supply_before = self.supply;
     let max_supply = self.max_supply;
@@ -328,8 +334,8 @@ public fun supply(self: &Pressing): u32 {
     self.supply
 }
 
-/// Return the immutable supply ceiling, if one exists.
-public fun max_supply(self: &Pressing): Option<u32> {
+/// Return the immutable lifetime issuance ceiling.
+public fun max_supply(self: &Pressing): u32 {
     self.max_supply
 }
 
@@ -375,15 +381,16 @@ fun authorize(self: &Pressing, cap: &PressingAdminCap) {
 
 // === Test Functions ===
 
+/// Construct an isolated test Pressing without Release derivation or sequence checks.
 #[test_only]
 public fun new_for_testing(
     release_id: ID,
     edition: u16,
-    max_supply: Option<u32>,
+    max_supply: u32,
     ctx: &mut TxContext,
 ): (Pressing, PressingAdminCap) {
     assert!(edition > 0, EInvalidEdition);
-    max_supply.do_ref!(|max| assert!(*max > 0, EInvalidMaxSupply));
+    assert!(max_supply > 0, EInvalidMaxSupply);
 
     let mut id = object::new(ctx);
     let pressing_id = id.to_inner();
@@ -414,7 +421,7 @@ public fun foreign_admin_cap_for_testing(
 #[test_only]
 public fun created_event_fields(
     event: PressingCreatedEvent,
-): (address, address, address, address, u16, u32, Option<u32>, vector<String>) {
+): (address, address, address, address, u16, u32, u32, vector<String>) {
     let PressingCreatedEvent {
         pressing_id,
         release_id,
@@ -509,7 +516,7 @@ public fun revoked_event_fields<Distributor: drop>(
 #[test_only]
 public fun purchased_event_fields<Distributor: drop, Currency>(
     event: RecordPurchasedEvent<Distributor, Currency>,
-): (address, address, address, u16, u32, u64, address, u64, u32, u32, u32, Option<u32>) {
+): (address, address, address, u16, u32, u64, address, u64, u32, u32, u32, u32) {
     let RecordPurchasedEvent {
         record_id,
         release_id,
