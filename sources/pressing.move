@@ -91,8 +91,6 @@ public struct RecordPurchasedEvent<phantom Distributor: drop, phantom Currency> 
     number: u32,
     /// The amount paid for the Record.
     purchase_price: u64,
-    /// The transaction sender who purchased the Record.
-    purchased_by: address,
     /// The purchase time in Unix milliseconds from Sui's Clock.
     purchased_timestamp_ms: u64,
     /// Supply immediately before this mint.
@@ -268,7 +266,6 @@ public fun mint<Distributor: drop, Currency>(
     _distributor: Distributor,
     purchase_price: u64,
     clock: &Clock,
-    ctx: &mut TxContext,
 ): Record {
     assert!(self.is_distributor_authorized<Distributor>(), EDistributorNotAuthorized);
     assert!(purchase_price > 0, EInvalidPurchasePrice);
@@ -284,7 +281,6 @@ public fun mint<Distributor: drop, Currency>(
         self.supply,
         purchase_price,
         clock,
-        ctx,
     );
     emit(RecordPurchasedEvent<Distributor, Currency> {
         record_id: object::id(&purchased).to_address(),
@@ -293,7 +289,6 @@ public fun mint<Distributor: drop, Currency>(
         edition: purchased.edition(),
         number: purchased.number(),
         purchase_price: purchased.purchase_price(),
-        purchased_by: purchased.purchased_by(),
         purchased_timestamp_ms: purchased.purchased_timestamp_ms(),
         supply_before,
         supply_delta: 1,
@@ -516,7 +511,7 @@ public fun revoked_event_fields<Distributor: drop>(
 #[test_only]
 public fun purchased_event_fields<Distributor: drop, Currency>(
     event: RecordPurchasedEvent<Distributor, Currency>,
-): (address, address, address, u16, u32, u64, address, u64, u32, u32, u32, u32) {
+): (address, address, address, u16, u32, u64, u64, u32, u32, u32, u32) {
     let RecordPurchasedEvent {
         record_id,
         release_id,
@@ -524,7 +519,6 @@ public fun purchased_event_fields<Distributor: drop, Currency>(
         edition,
         number,
         purchase_price,
-        purchased_by,
         purchased_timestamp_ms,
         supply_before,
         supply_delta,
@@ -538,7 +532,6 @@ public fun purchased_event_fields<Distributor: drop, Currency>(
         edition,
         number,
         purchase_price,
-        purchased_by,
         purchased_timestamp_ms,
         supply_before,
         supply_delta,

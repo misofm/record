@@ -28,8 +28,6 @@ public struct Record has key, store {
     purchase_currency: TypeName,
     /// The actual amount paid, including any accepted overpayment.
     purchase_price: u64,
-    /// The transaction sender who purchased this Record.
-    purchased_by: address,
     /// When this Record was purchased, in Unix milliseconds from Sui's Clock.
     purchased_timestamp_ms: u64,
 }
@@ -67,11 +65,9 @@ public(package) fun new<Currency>(
     number: u32,
     purchase_price: u64,
     clock: &Clock,
-    ctx: &TxContext,
 ): Record {
     let pressing_id = pressing_uid.to_inner();
     let purchase_currency = type_name::with_defining_ids<Currency>();
-    let purchased_by = ctx.sender();
     let purchased_timestamp_ms = clock.timestamp_ms();
     let record = Record {
         id: derived_object::claim(pressing_uid, RecordKey(number)),
@@ -81,7 +77,6 @@ public(package) fun new<Currency>(
         number,
         purchase_currency,
         purchase_price,
-        purchased_by,
         purchased_timestamp_ms,
     };
 
@@ -102,7 +97,6 @@ public fun destroy(self: Record) {
         number,
         purchase_currency: _,
         purchase_price: _,
-        purchased_by: _,
         purchased_timestamp_ms: _,
     } = self;
     let release_id = release_id.to_address();
@@ -159,11 +153,6 @@ public fun purchase_currency(self: &Record): TypeName {
 /// Return the amount paid for this Record.
 public fun purchase_price(self: &Record): u64 {
     self.purchase_price
-}
-
-/// Return the transaction sender who purchased this Record.
-public fun purchased_by(self: &Record): address {
-    self.purchased_by
 }
 
 /// Return the purchase time in Unix milliseconds from Sui's Clock.

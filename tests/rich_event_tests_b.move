@@ -27,7 +27,7 @@ fun mint<C>(
 ): Record {
     let mut c = clock::create_for_testing(ctx);
     c.set_for_testing(time);
-    let r = p.mint<Distributor, C>(Distributor(), price, &c, ctx);
+    let r = p.mint<Distributor, C>(Distributor(), price, &c);
     c.destroy_for_testing();
     r
 }
@@ -43,16 +43,15 @@ fun purchase_event_is_separated_by_currency_type() {
     let mut ee = event::events_by_type<pressing::RecordPurchasedEvent<Distributor, EUR>>();
     assert_eq!(ue.length(), 1);
     assert_eq!(ee.length(), 1);
-    let (_, _, _, _, _, price, buyer, time, before, delta, after, max) =
+    let (_, _, _, _, _, price, time, before, delta, after, max) =
         pressing::purchased_event_fields(ue.pop_back());
     assert_eq!(price, 5);
-    assert_eq!(buyer, @0xA);
     assert_eq!(time, 10);
     assert_eq!(before, 0);
     assert_eq!(delta, 1);
     assert_eq!(after, 1);
     assert_eq!(max, 100);
-    let (_, _, _, _, _, price, _, time, before, delta, after, _) =
+    let (_, _, _, _, _, price, time, before, delta, after, _) =
         pressing::purchased_event_fields(ee.pop_back());
     assert_eq!(price, 7);
     assert_eq!(time, 20);
@@ -77,7 +76,7 @@ fun capped_supply_is_lifetime_supply_after_destruction() {
     assert_eq!(second.number(), 2);
     let events = event::events_by_type<pressing::RecordPurchasedEvent<Distributor, USD>>();
     assert_eq!(events.length(), 2);
-    let (_, _, _, _, number, _, _, _, before, delta, after, max) =
+    let (_, _, _, _, number, _, _, before, delta, after, max) =
         pressing::purchased_event_fields(events[1]);
     assert_eq!(number, 2);
     assert_eq!(before, 1);

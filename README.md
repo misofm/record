@@ -22,7 +22,6 @@ public struct Record has key, store {
     number: u32,
     purchase_currency: TypeName,
     purchase_price: u64,
-    purchased_by: address,
     purchased_timestamp_ms: u64,
 }
 ```
@@ -102,13 +101,11 @@ public fun purchase<Currency>(
     pressing: &mut Pressing,
     purchase_price: u64,
     clock: &Clock,
-    ctx: &mut TxContext,
 ): Record {
     pressing.mint<DistributorWitness, Currency>(
         DistributorWitness(),
         purchase_price,
         clock,
-        ctx,
     )
 }
 ```
@@ -131,11 +128,12 @@ The package derives or stamps every Record field:
 - The Record UID is claimed at `RecordKey(number)` from the Pressing UID.
 - `purchase_currency` comes from the Distributor's concrete `Currency` type.
 - `purchase_price` is the positive amount validated by the Distributor.
-- `purchased_by` comes from `TxContext.sender()`.
 - `purchased_timestamp_ms` comes from Sui's `Clock`.
 
-The eventual recipient is deliberately not stored: the returned Record remains
-composable and may be purchased as a gift.
+Neither the buyer nor the eventual recipient is stored: the returned Record
+remains composable and may be purchased as a gift, so its current owner is the
+only holder that matters on-chain. Indexers that need the buyer can read the
+transaction sender of the `RecordPurchasedEvent`.
 
 ## Ownership and extensions
 

@@ -30,7 +30,7 @@ fun mint(
 ): Record {
     let mut c = clock::create_for_testing(ctx);
     c.set_for_testing(time);
-    let r = p.mint<Distributor, USD>(Distributor(), price, &c, ctx);
+    let r = p.mint<Distributor, USD>(Distributor(), price, &c);
     c.destroy_for_testing();
     r
 }
@@ -136,7 +136,6 @@ fun view_and_uid_borrows_are_event_silent() {
     let _ = r.number();
     let _ = r.purchase_currency();
     let _ = r.purchase_price();
-    let _ = r.purchased_by();
     let _ = r.purchased_timestamp_ms();
     let _ = r.uid();
     assert_eq!(event::events_by_type<pressing::RecordPurchasedEvent<Distributor, USD>>().length(), 1);

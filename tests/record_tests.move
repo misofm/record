@@ -59,7 +59,7 @@ fun mint_record<Distributor: drop>(
 ): Record {
     let mut clk = clock::create_for_testing(ctx);
     clk.set_for_testing(timestamp_ms);
-    let record = pressing.mint<Distributor, USD>(distributor, purchase_price, &clk, ctx);
+    let record = pressing.mint<Distributor, USD>(distributor, purchase_price, &clk);
     clk.destroy_for_testing();
     record
 }
@@ -89,7 +89,6 @@ fun authorized_distributor_mints_a_self_describing_extensible_record() {
     assert_eq!(r.number(), 1);
     assert_eq!(r.purchase_currency(), type_name::with_defining_ids<USD>());
     assert_eq!(r.purchase_price(), purchase_price);
-    assert_eq!(r.purchased_by(), @0xA);
     assert_eq!(r.purchased_timestamp_ms(), purchased_timestamp_ms);
     assert_eq!(pressing.supply(), 1);
     assert_eq!(pressing.max_supply(), 100);
@@ -107,7 +106,6 @@ fun authorized_distributor_mints_a_self_describing_extensible_record() {
         edition,
         number,
         event_purchase_price,
-        event_purchased_by,
         event_purchased_timestamp_ms,
         _,
         _,
@@ -120,7 +118,6 @@ fun authorized_distributor_mints_a_self_describing_extensible_record() {
     assert_eq!(edition, 2);
     assert_eq!(number, 1);
     assert_eq!(event_purchase_price, purchase_price);
-    assert_eq!(event_purchased_by, @0xA);
     assert_eq!(event_purchased_timestamp_ms, purchased_timestamp_ms);
 
     df::add(r.uid_mut(), DemoKey(), b"extension");
@@ -518,7 +515,7 @@ fun boundary_editions_preserve_record_and_event_provenance() {
         assert_eq!(p.edition(), edition);
         assert_eq!(r.edition(), edition);
         let mut events = event::events_by_type<pressing::RecordPurchasedEvent<DemoDistributor, USD>>();
-        let (_, _, _, event_edition, _, _, _, _, _, _, _, _) =
+        let (_, _, _, event_edition, _, _, _, _, _, _, _) =
             pressing::purchased_event_fields(events.pop_back());
         assert_eq!(event_edition, edition);
         r.destroy();

@@ -55,8 +55,9 @@ findings.**
   restricted constructor, so it cannot be copied or stored for later minting.
 - **Stored purchase data is internally bound.** Release, Pressing, and edition come
   from the actual Pressing; number comes from its counter; Record ID uses that number;
-  currency comes from the concrete type; buyer comes from `TxContext`; and purchase
-  time comes from `Clock`. The authorized Distributor supplies the positive price
+  currency comes from the concrete type; and purchase time comes from `Clock`. The
+  buyer is intentionally not stored; it is the transaction sender of the purchase
+  event. The authorized Distributor supplies the positive price
   after validating payment. Distributor and Currency are carried by the purchase
   event's phantom type parameters; runtime strings remain only where events
   intentionally snapshot heterogeneous state.
@@ -83,7 +84,7 @@ findings.**
 - A compromised Pressing cap can authorize a malicious Distributor or modify
   cap-gated extensions. It cannot rewrite the immutable maximum or directly select a
   Record number through any public API.
-- Currency, positive price, buyer, and purchase time are Record invariants. The
+- Currency, positive price, and purchase time are Record invariants. The
   authorized Distributor must validate that the supplied price equals the payment it
   accepted. Pricing rule, schedule, and final recipient remain Distributor concerns.
 
