@@ -29,7 +29,7 @@ findings.**
 
 - **Record construction is closed.** The production constructor is
   `public(package)`, and only `pressing::mint` reaches it. External Distributors
-  cannot select lineage, currency type, buyer, timestamp, or Record number.
+  cannot select lineage, currency type, timestamp, or Record number.
 - **Pressing construction is Release-authorized.** `release::uid_mut` rejects a
   mismatched Release cap. `PressingKey(edition)` makes each `(release, edition)`
   canonical and claim-once.

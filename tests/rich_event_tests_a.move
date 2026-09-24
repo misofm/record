@@ -136,7 +136,7 @@ fun view_and_uid_borrows_are_event_silent() {
     let _ = r.number();
     let _ = r.purchase_currency();
     let _ = r.purchase_price();
-    let _ = r.purchased_timestamp_ms();
+    let _ = r.purchased_at_ms();
     let _ = r.uid();
     assert_eq!(event::events_by_type<pressing::RecordPurchasedEvent<Distributor, USD>>().length(), 1);
     r.destroy();

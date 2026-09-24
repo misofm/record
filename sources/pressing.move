@@ -92,7 +92,7 @@ public struct RecordPurchasedEvent<phantom Distributor: drop, phantom Currency> 
     /// The amount paid for the Record.
     purchase_price: u64,
     /// The purchase time in Unix milliseconds from Sui's Clock.
-    purchased_timestamp_ms: u64,
+    purchased_at_ms: u64,
     /// Supply immediately before this mint.
     supply_before: u32,
     /// Supply delta applied by this mint.
@@ -289,7 +289,7 @@ public fun mint<Distributor: drop, Currency>(
         edition: purchased.edition(),
         number: purchased.number(),
         purchase_price: purchased.purchase_price(),
-        purchased_timestamp_ms: purchased.purchased_timestamp_ms(),
+        purchased_at_ms: purchased.purchased_at_ms(),
         supply_before,
         supply_delta: 1,
         supply_after: self.supply,
@@ -519,7 +519,7 @@ public fun purchased_event_fields<Distributor: drop, Currency>(
         edition,
         number,
         purchase_price,
-        purchased_timestamp_ms,
+        purchased_at_ms,
         supply_before,
         supply_delta,
         supply_after,
@@ -532,7 +532,7 @@ public fun purchased_event_fields<Distributor: drop, Currency>(
         edition,
         number,
         purchase_price,
-        purchased_timestamp_ms,
+        purchased_at_ms,
         supply_before,
         supply_delta,
         supply_after,

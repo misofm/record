@@ -29,7 +29,7 @@ public struct Record has key, store {
     /// The actual amount paid, including any accepted overpayment.
     purchase_price: u64,
     /// When this Record was purchased, in Unix milliseconds from Sui's Clock.
-    purchased_timestamp_ms: u64,
+    purchased_at_ms: u64,
 }
 
 /// Key for deriving a Record UID from its Pressing.
@@ -68,7 +68,7 @@ public(package) fun new<Currency>(
 ): Record {
     let pressing_id = pressing_uid.to_inner();
     let purchase_currency = type_name::with_defining_ids<Currency>();
-    let purchased_timestamp_ms = clock.timestamp_ms();
+    let purchased_at_ms = clock.timestamp_ms();
     let record = Record {
         id: derived_object::claim(pressing_uid, RecordKey(number)),
         release_id,
@@ -77,7 +77,7 @@ public(package) fun new<Currency>(
         number,
         purchase_currency,
         purchase_price,
-        purchased_timestamp_ms,
+        purchased_at_ms,
     };
 
     record
@@ -97,7 +97,7 @@ public fun destroy(self: Record) {
         number,
         purchase_currency: _,
         purchase_price: _,
-        purchased_timestamp_ms: _,
+        purchased_at_ms: _,
     } = self;
     let release_id = release_id.to_address();
     let pressing_id = pressing_id.to_address();
@@ -156,8 +156,8 @@ public fun purchase_price(self: &Record): u64 {
 }
 
 /// Return the purchase time in Unix milliseconds from Sui's Clock.
-public fun purchased_timestamp_ms(self: &Record): u64 {
-    self.purchased_timestamp_ms
+public fun purchased_at_ms(self: &Record): u64 {
+    self.purchased_at_ms
 }
 
 /// Derive the Record address for `number` in `pressing_id`'s edition.

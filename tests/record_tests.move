@@ -73,13 +73,13 @@ fun authorized_distributor_mints_a_self_describing_extensible_record() {
     pressing.authorize_distributor<DemoDistributor>(&admin_cap);
     let pressing_id = object::id(&pressing);
     let purchase_price = 25;
-    let purchased_timestamp_ms = 1_726_000_123;
+    let purchased_at_ms = 1_726_000_123;
 
     let mut r = mint_record(
         &mut pressing,
         demo_distributor(),
         purchase_price,
-        purchased_timestamp_ms,
+        purchased_at_ms,
         &mut ctx,
     );
 
@@ -89,7 +89,7 @@ fun authorized_distributor_mints_a_self_describing_extensible_record() {
     assert_eq!(r.number(), 1);
     assert_eq!(r.purchase_currency(), type_name::with_defining_ids<USD>());
     assert_eq!(r.purchase_price(), purchase_price);
-    assert_eq!(r.purchased_timestamp_ms(), purchased_timestamp_ms);
+    assert_eq!(r.purchased_at_ms(), purchased_at_ms);
     assert_eq!(pressing.supply(), 1);
     assert_eq!(pressing.max_supply(), 100);
     assert!(pressing.is_distributor_authorized<DemoDistributor>());
@@ -106,7 +106,7 @@ fun authorized_distributor_mints_a_self_describing_extensible_record() {
         edition,
         number,
         event_purchase_price,
-        event_purchased_timestamp_ms,
+        event_purchased_at_ms,
         _,
         _,
         _,
@@ -118,7 +118,7 @@ fun authorized_distributor_mints_a_self_describing_extensible_record() {
     assert_eq!(edition, 2);
     assert_eq!(number, 1);
     assert_eq!(event_purchase_price, purchase_price);
-    assert_eq!(event_purchased_timestamp_ms, purchased_timestamp_ms);
+    assert_eq!(event_purchased_at_ms, purchased_at_ms);
 
     df::add(r.uid_mut(), DemoKey(), b"extension");
     assert!(df::exists(r.uid(), DemoKey()));
