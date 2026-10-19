@@ -19,7 +19,7 @@ fun ident(a: address): ID {
 }
 
 fun release(ctx: &mut TxContext): (Release, ReleaseAdminCap) {
-    release::new_for_testing("Test", vector[], ctx)
+    release::new_for_testing(vector[], ctx)
 }
 
 fun mint(

@@ -47,7 +47,7 @@ fun impostor_distributor(): ImpostorDistributor {
 }
 
 fun a_release(ctx: &mut TxContext): (Release, ReleaseAdminCap) {
-    release::new_for_testing("Test", vector[], ctx)
+    release::new_for_testing(vector[], ctx)
 }
 
 fun mint_record<Distributor: drop>(
