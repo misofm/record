@@ -8,8 +8,10 @@
 /// pricing and payment validation live in authorized distributor packages.
 module record::record;
 
+// === Imports ===
+
 use std::type_name::{Self, TypeName};
-use sui::{clock::Clock, derived_object};
+use sui::{clock::Clock, derived_object, event::emit};
 
 // === Structs ===
 
@@ -51,38 +53,6 @@ public struct RecordDestroyedEvent has copy, drop {
     number: u32,
 }
 
-// === Package Functions ===
-
-/// Mint the next Record in a Pressing's sequence.
-///
-/// Only another module in `record` can call this constructor. `Pressing`
-/// allocates `number` and checks distributor authorization and supply before
-/// reaching this function.
-public(package) fun new<Currency>(
-    pressing_uid: &mut UID,
-    release_id: ID,
-    edition: u16,
-    number: u32,
-    purchase_price: u64,
-    clock: &Clock,
-): Record {
-    let pressing_id = pressing_uid.to_inner();
-    let purchase_currency = type_name::with_defining_ids<Currency>();
-    let purchased_at_ms = clock.timestamp_ms();
-    let record = Record {
-        id: derived_object::claim(pressing_uid, RecordKey(number)),
-        release_id,
-        pressing_id,
-        edition,
-        number,
-        purchase_currency,
-        purchase_price,
-        purchased_at_ms,
-    };
-
-    record
-}
-
 // === Public Functions ===
 
 /// Destroy a Record. Detach any dynamic-field extensions first or they become
@@ -102,25 +72,13 @@ public fun destroy(self: Record) {
     let release_id = release_id.to_address();
     let pressing_id = pressing_id.to_address();
     id.delete();
-    sui::event::emit(RecordDestroyedEvent {
+    emit(RecordDestroyedEvent {
         record_id,
         release_id,
         pressing_id,
         edition,
         number,
     });
-}
-
-// === Extension Access ===
-
-/// Borrow the Record UID for read-only extensions.
-public fun uid(self: &Record): &UID {
-    &self.id
-}
-
-/// Mutably borrow the Record UID for owner-authorized extensions.
-public fun uid_mut(self: &mut Record): &mut UID {
-    &mut self.id
 }
 
 // === View Functions ===
@@ -163,6 +121,50 @@ public fun purchased_at_ms(self: &Record): u64 {
 /// Derive the Record address for `number` in `pressing_id`'s edition.
 public fun derive_address(pressing_id: ID, number: u32): address {
     derived_object::derive_address(pressing_id, RecordKey(number))
+}
+
+// === Extension Access ===
+
+/// Borrow the Record UID for read-only extensions.
+public fun uid(self: &Record): &UID {
+    &self.id
+}
+
+/// Mutably borrow the Record UID for owner-authorized extensions.
+public fun uid_mut(self: &mut Record): &mut UID {
+    &mut self.id
+}
+
+// === Package Functions ===
+
+/// Mint the next Record in a Pressing's sequence.
+///
+/// Only another module in `record` can call this constructor. `Pressing`
+/// allocates `number` and checks distributor authorization and supply before
+/// reaching this function.
+public(package) fun new<Currency>(
+    pressing_uid: &mut UID,
+    release_id: ID,
+    edition: u16,
+    number: u32,
+    purchase_price: u64,
+    clock: &Clock,
+): Record {
+    let pressing_id = pressing_uid.to_inner();
+    let purchase_currency = type_name::with_defining_ids<Currency>();
+    let purchased_at_ms = clock.timestamp_ms();
+    let record = Record {
+        id: derived_object::claim(pressing_uid, RecordKey(number)),
+        release_id,
+        pressing_id,
+        edition,
+        number,
+        purchase_currency,
+        purchase_price,
+        purchased_at_ms,
+    };
+
+    record
 }
 
 // === Test Functions ===

@@ -10,19 +10,25 @@
 /// that edition. Distributors own delivery mechanics; the Pressing owns issuance.
 module record::pressing;
 
+// === Imports ===
+
 use musicos::release::{Release, ReleaseAdminCap};
 use record::record::{Self, Record};
 use std::ascii::String;
 use std::type_name::{Self, TypeName};
 use sui::{clock::Clock, derived_object, event::emit, vec_set::{Self, VecSet}};
 
+// === Errors ===
+
+const EUnauthorized: u64 = 0;
+const EInvalidEdition: u64 = 1;
+const EInvalidMaxSupply: u64 = 2;
+const EDistributorNotAuthorized: u64 = 3;
+const EMaxSupplyReached: u64 = 4;
+const EInvalidPurchasePrice: u64 = 5;
+const EPreviousEditionMissing: u64 = 6;
+
 // === Structs ===
-
-/// Key for deriving one edition's Pressing from its Release.
-public struct PressingKey(u16) has copy, drop, store;
-
-/// Key for deriving the capability that administers a Pressing.
-public struct PressingAdminCapKey() has copy, drop, store;
 
 /// One edition's Record namespace, supply, cap, and authorized distributors.
 public struct Pressing has key {
@@ -47,6 +53,12 @@ public struct PressingAdminCap has key, store {
     /// The Pressing controlled by this capability.
     pressing_id: ID,
 }
+
+/// Key for deriving one edition's Pressing from its Release.
+public struct PressingKey(u16) has copy, drop, store;
+
+/// Key for deriving the capability that administers a Pressing.
+public struct PressingAdminCapKey() has copy, drop, store;
 
 // === Events ===
 
@@ -73,6 +85,18 @@ public struct PressingCreatedEvent has copy, drop {
     max_supply: u32,
     /// Defining type names of distributors currently permitted to mint.
     distributors: vector<String>,
+}
+
+/// Emitted when a distributor witness type is newly authorized for an edition.
+public struct PressingDistributorAuthorizedEvent<phantom Distributor: drop> has copy, drop {
+    pressing_id: address,
+    release_id: address,
+    edition: u16,
+    pressing_admin_cap_id: address,
+    authorized_before: bool,
+    authorized_after: bool,
+    distributor_count_before: u64,
+    distributor_count_after: u64,
 }
 
 /// Emitted after a Pressing mints a Record for an authorized distributor.
@@ -103,18 +127,6 @@ public struct RecordPurchasedEvent<phantom Distributor: drop, phantom Currency> 
     max_supply: u32,
 }
 
-/// Emitted when a distributor witness type is newly authorized for an edition.
-public struct PressingDistributorAuthorizedEvent<phantom Distributor: drop> has copy, drop {
-    pressing_id: address,
-    release_id: address,
-    edition: u16,
-    pressing_admin_cap_id: address,
-    authorized_before: bool,
-    authorized_after: bool,
-    distributor_count_before: u64,
-    distributor_count_after: u64,
-}
-
 /// Emitted when a distributor witness type is removed from an edition.
 public struct PressingDistributorRevokedEvent<phantom Distributor: drop> has copy, drop {
     pressing_id: address,
@@ -126,16 +138,6 @@ public struct PressingDistributorRevokedEvent<phantom Distributor: drop> has cop
     distributor_count_before: u64,
     distributor_count_after: u64,
 }
-
-// === Errors ===
-
-const EUnauthorized: u64 = 0;
-const EInvalidEdition: u64 = 1;
-const EInvalidMaxSupply: u64 = 2;
-const EDistributorNotAuthorized: u64 = 3;
-const EMaxSupplyReached: u64 = 4;
-const EInvalidPurchasePrice: u64 = 5;
-const EPreviousEditionMissing: u64 = 6;
 
 // === Public Functions ===
 
@@ -298,20 +300,6 @@ public fun mint<Distributor: drop, Currency>(
     purchased
 }
 
-// === Extension Access ===
-
-/// Borrow the Pressing UID for read-only extensions.
-public fun uid(self: &Pressing): &UID {
-    &self.id
-}
-
-/// Mutably access the Pressing UID for cap-authorized extensions, including
-/// distributor-owned objects derived from this edition.
-public fun uid_mut(self: &mut Pressing, cap: &PressingAdminCap): &mut UID {
-    self.authorize(cap);
-    &mut self.id
-}
-
 // === View Functions ===
 
 /// Return the release represented by this Pressing.
@@ -357,6 +345,20 @@ public fun derive_address(release_id: ID, edition: u16): address {
 /// Derive a Pressing's admin capability address.
 public fun derive_admin_cap_address(pressing_id: ID): address {
     derived_object::derive_address(pressing_id, PressingAdminCapKey())
+}
+
+// === Extension Access ===
+
+/// Borrow the Pressing UID for read-only extensions.
+public fun uid(self: &Pressing): &UID {
+    &self.id
+}
+
+/// Mutably access the Pressing UID for cap-authorized extensions, including
+/// distributor-owned objects derived from this edition.
+public fun uid_mut(self: &mut Pressing, cap: &PressingAdminCap): &mut UID {
+    self.authorize(cap);
+    &mut self.id
 }
 
 // === Private Functions ===
@@ -405,6 +407,7 @@ public fun new_for_testing(
         admin_cap,
     )
 }
+
 #[test_only]
 public fun foreign_admin_cap_for_testing(
     pressing_id: ID,
