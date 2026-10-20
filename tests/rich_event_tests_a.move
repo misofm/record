@@ -8,7 +8,6 @@ use musicos::release::{Self, Release, ReleaseAdminCap};
 use record::pressing::{Self, Pressing};
 use record::record::{Self, Record};
 use std::unit_test::{assert_eq, destroy};
-use sui::clock;
 use sui::event;
 use sui::test_scenario as ts;
 
@@ -23,17 +22,8 @@ fun release(ctx: &mut TxContext): (Release, ReleaseAdminCap) {
     release::new_for_testing(vector[], ctx)
 }
 
-fun mint(
-    p: &mut Pressing,
-    price: u64,
-    time: u64,
-    ctx: &mut TxContext,
-): Record {
-    let mut c = clock::create_for_testing(ctx);
-    c.set_for_testing(time);
-    let r = p.mint<Distributor, USD>(Distributor(), price, &c);
-    c.destroy_for_testing();
-    r
+fun mint(p: &mut Pressing, price: u64): Record {
+    p.mint<Distributor, USD>(Distributor(), price)
 }
 
 #[test]
@@ -63,7 +53,7 @@ fun sharing_is_silent_and_preserves_config_and_supply() {
     let (mut p, cap) = pressing::new_for_testing(ident(@0xBEEF), 2, 100, scenario.ctx());
     let p_id = object::id(&p);
     p.authorize_distributor<Distributor>(&cap);
-    let r = mint(&mut p, 9, 42, scenario.ctx());
+    let r = mint(&mut p, 9);
     r.destroy();
     let event_count = event::num_events();
     p.share();
@@ -106,7 +96,7 @@ fun view_and_uid_borrows_are_event_silent() {
     let mut c = tx_context::dummy();
     let (mut p, cap) = pressing::new_for_testing(ident(@0xBEEF), 1, 100, &mut c);
     p.authorize_distributor<Distributor>(&cap);
-    let r = mint(&mut p, 3, 0, &mut c);
+    let r = mint(&mut p, 3);
     let _ = p.release_id();
     let _ = p.edition();
     let _ = p.supply();
@@ -118,7 +108,6 @@ fun view_and_uid_borrows_are_event_silent() {
     let _ = r.number();
     let _ = r.purchase_currency();
     let _ = r.purchase_price();
-    let _ = r.purchased_at_ms();
     let _ = r.uid();
     let purchased = event::events_by_type<pressing::RecordPurchasedEvent<Distributor, USD>>();
     assert_eq!(purchased.length(), 1);

@@ -14,7 +14,7 @@ module record::pressing;
 use musicos::release::{Release, ReleaseAdminCap};
 use record::record::{Self, Record};
 use std::type_name::{Self, TypeName};
-use sui::{clock::Clock, derived_object, event::emit, vec_set::{Self, VecSet}};
+use sui::{derived_object, event::emit, vec_set::{Self, VecSet}};
 
 // === Errors ===
 
@@ -126,7 +126,6 @@ public fun mint<Distributor: drop, Currency>(
     self: &mut Pressing,
     _: Distributor,
     purchase_price: u64,
-    clock: &Clock,
 ): Record {
     assert!(self.is_distributor_authorized<Distributor>(), EDistributorNotAuthorized);
     assert!(purchase_price > 0, EInvalidPurchasePrice);
@@ -140,7 +139,6 @@ public fun mint<Distributor: drop, Currency>(
         self.edition,
         number,
         purchase_price,
-        clock,
     );
     emit(RecordPurchasedEvent<Distributor, Currency> {
         record_id: object::id(&record),

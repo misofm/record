@@ -10,8 +10,8 @@
 - [x] Add `Pressing` to `record` as the lifecycle and purchase boundary.
 - [x] Derive each Pressing from its Release at `PressingKey(edition)`.
 - [x] Store `release_id`, `pressing_id`, edition-local `number`, `edition`, currency,
-      price, and Clock-stamped purchase time on each Record (the buyer is the
-      purchase transaction's sender, not stored).
+      and price on each Record (the buyer and time are the purchase transaction's
+      sender and timestamp, not stored).
 - [x] Derive Record UIDs from `(pressing_id, RecordKey(number))`.
 - [x] Track edition-local supply directly on the Pressing.
 - [x] Require positive immutable `u32` maximum supply.
@@ -43,7 +43,7 @@
 
 - [ ] Replace the old `miso_pressing` package with one or more Distributor packages.
 - [ ] Update Distributor calls to use
-      `pressing::mint<Distributor, Currency>(witness, price, clock)`.
+      `pressing::mint<Distributor, Currency>(witness, price)`.
 - [ ] Update SDK/application transaction construction with `pressing_id` and edition.
 - [ ] Redesign the Record Seal policy's ownership proof for `key + store`.
 - [ ] Add a migration Distributor for Records from earlier package publications.

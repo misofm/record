@@ -8,7 +8,6 @@ use record::pressing::{Self, Pressing};
 use record::record::{Self, Record};
 use std::bcs;
 use std::unit_test::{assert_eq, destroy};
-use sui::clock;
 use sui::event;
 use sui::test_scenario as ts;
 
@@ -20,17 +19,8 @@ fun id(a: address): ID {
     object::id_from_address(a)
 }
 
-fun mint<C>(
-    p: &mut Pressing,
-    price: u64,
-    time: u64,
-    ctx: &mut TxContext,
-): Record {
-    let mut c = clock::create_for_testing(ctx);
-    c.set_for_testing(time);
-    let r = p.mint<Distributor, C>(Distributor(), price, &c);
-    c.destroy_for_testing();
-    r
+fun mint<Currency>(p: &mut Pressing, price: u64): Record {
+    p.mint<Distributor, Currency>(Distributor(), price)
 }
 
 #[test]
@@ -38,8 +28,8 @@ fun purchase_event_is_separated_by_currency_type() {
     let mut c = tx_context::new_from_hint(@0xA, 0, 0, 0, 0);
     let (mut p, cap) = pressing::new_for_testing(id(@0xBEEF), 1, 100, &mut c);
     p.authorize_distributor<Distributor>(&cap);
-    let usd = mint<USD>(&mut p, 5, 10, &mut c);
-    let eur = mint<EUR>(&mut p, 7, 20, &mut c);
+    let usd = mint<USD>(&mut p, 5);
+    let eur = mint<EUR>(&mut p, 7);
     let mut ue = event::events_by_type<pressing::RecordPurchasedEvent<Distributor, USD>>();
     let mut ee = event::events_by_type<pressing::RecordPurchasedEvent<Distributor, EUR>>();
     assert_eq!(ue.length(), 1);
@@ -50,8 +40,6 @@ fun purchase_event_is_separated_by_currency_type() {
     let (_, _, number, price) = pressing::purchased_event_fields(&ee.pop_back());
     assert_eq!(number, 2);
     assert_eq!(price, 7);
-    assert_eq!(usd.purchased_at_ms(), 10);
-    assert_eq!(eur.purchased_at_ms(), 20);
     usd.destroy();
     eur.destroy();
     destroy(p);
@@ -63,9 +51,9 @@ fun capped_supply_is_lifetime_supply_after_destruction() {
     let mut c = tx_context::dummy();
     let (mut p, cap) = pressing::new_for_testing(id(@0xBEEF), 1, 2, &mut c);
     p.authorize_distributor<Distributor>(&cap);
-    let first = mint<USD>(&mut p, 1, 0, &mut c);
+    let first = mint<USD>(&mut p, 1);
     first.destroy();
-    let second = mint<USD>(&mut p, 1, 0, &mut c);
+    let second = mint<USD>(&mut p, 1);
     assert_eq!(p.supply(), 2);
     assert_eq!(second.number(), 2);
     let events = event::events_by_type<pressing::RecordPurchasedEvent<Distributor, USD>>();
@@ -82,7 +70,7 @@ fun destruction_event_identifies_only_destroyed_record() {
     let mut s = ts::begin(@0xA);
     let (mut p, cap) = pressing::new_for_testing(id(@0xBEEF), 1, 100, s.ctx());
     p.authorize_distributor<Distributor>(&cap);
-    let r = mint<USD>(&mut p, 11, 99, s.ctx());
+    let r = mint<USD>(&mut p, 11);
     destroy(p);
     destroy(cap);
     transfer::public_transfer(r, @0xB);

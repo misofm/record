@@ -57,9 +57,9 @@ findings.**
   restricted constructor, so it cannot be copied or stored for later minting.
 - **Stored purchase data is internally bound.** Release, Pressing, and edition come
   from the actual Pressing; number comes from its counter; Record ID uses that number;
-  currency comes from the concrete type; and purchase time comes from `Clock`. The
-  buyer is intentionally not stored; it is the transaction sender of the purchase
-  event. The authorized Distributor supplies the positive price
+  and currency comes from the concrete type. The buyer and purchase time are
+  intentionally not stored; they are the sender and timestamp of the purchase
+  event's transaction. The authorized Distributor supplies the positive price
   after validating payment. Distributor and Currency are carried by the purchase
   event's phantom type parameters; runtime strings remain only where events
   intentionally snapshot heterogeneous state.
