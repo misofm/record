@@ -10,8 +10,8 @@
 - [x] Add `Pressing` to `record` as the lifecycle and purchase boundary.
 - [x] Derive each Pressing from its Release at `PressingKey(edition)`.
 - [x] Store `release_id`, `pressing_id`, edition-local `number`, `edition`, currency,
-      and price on each Record (the buyer and time are the purchase transaction's
-      sender and timestamp, not stored).
+      price, and Clock-stamped purchase time on each Record (the buyer is the
+      purchase transaction's sender, not stored).
 - [x] Derive Record UIDs from `(pressing_id, RecordKey(number))`.
 - [x] Track edition-local supply directly on the Pressing.
 - [x] Require positive immutable `u32` maximum supply.

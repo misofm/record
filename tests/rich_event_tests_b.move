@@ -8,6 +8,7 @@ use record::pressing::{Self, Pressing};
 use record::record::{Self, Record};
 use std::bcs;
 use std::unit_test::{assert_eq, destroy};
+use sui::clock;
 use sui::event;
 use sui::test_scenario as ts;
 
@@ -19,8 +20,15 @@ fun id(a: address): ID {
     object::id_from_address(a)
 }
 
+const PURCHASED_AT_MS: u64 = 1_726_000_123;
+
 fun press<Currency>(p: &mut Pressing, price: u64): Record {
-    p.press<Distributor, Currency>(Distributor(), price)
+    let mut ctx = tx_context::dummy();
+    let mut clock = clock::create_for_testing(&mut ctx);
+    clock.set_for_testing(PURCHASED_AT_MS);
+    let record = p.press<Distributor, Currency>(Distributor(), price, &clock);
+    clock.destroy_for_testing();
+    record
 }
 
 #[test]

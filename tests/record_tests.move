@@ -9,6 +9,7 @@ use record::pressing::{Self, Pressing};
 use record::record::{Self, Record};
 use std::type_name;
 use std::unit_test::{assert_eq, destroy};
+use sui::clock;
 use sui::derived_object;
 use sui::dynamic_field as df;
 use sui::event;
@@ -49,12 +50,19 @@ fun a_release(ctx: &mut TxContext): (Release, ReleaseAdminCap) {
     release::new_for_testing(vector[], ctx)
 }
 
+const PURCHASED_AT_MS: u64 = 1_726_000_123;
+
 fun press_record<Distributor: drop>(
     pressing: &mut Pressing,
     distributor: Distributor,
     purchase_price: u64,
 ): Record {
-    pressing.press<Distributor, USD>(distributor, purchase_price)
+    let mut ctx = tx_context::dummy();
+    let mut clock = clock::create_for_testing(&mut ctx);
+    clock.set_for_testing(PURCHASED_AT_MS);
+    let record = pressing.press<Distributor, USD>(distributor, purchase_price, &clock);
+    clock.destroy_for_testing();
+    record
 }
 
 #[test]
@@ -75,6 +83,7 @@ fun authorized_distributor_presses_a_self_describing_extensible_record() {
     assert_eq!(r.number(), 1);
     assert_eq!(r.purchase_currency(), type_name::with_defining_ids<USD>());
     assert_eq!(r.purchase_price(), purchase_price);
+    assert_eq!(r.purchased_at_ms(), PURCHASED_AT_MS);
     assert_eq!(pressing.supply(), 1);
     assert_eq!(pressing.max_supply(), 100);
     assert!(pressing.is_distributor_authorized<DemoDistributor>());

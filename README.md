@@ -22,6 +22,7 @@ public struct Record has key, store {
     number: u32,
     purchase_currency: TypeName,
     purchase_price: u64,
+    purchased_at_ms: u64,
 }
 ```
 
@@ -98,10 +99,12 @@ A Distributor constructs its witness internally and consumes it immediately:
 public fun purchase<Currency>(
     pressing: &mut Pressing,
     purchase_price: u64,
+    clock: &Clock,
 ): Record {
     pressing.press<DistributorWitness, Currency>(
         DistributorWitness(),
         purchase_price,
+        clock,
     )
 }
 ```
@@ -124,12 +127,12 @@ The package derives or stamps every Record field:
 - The Record UID is claimed at `RecordKey(number)` from the Pressing UID.
 - `purchase_currency` comes from the Distributor's concrete `Currency` type.
 - `purchase_price` is the amount validated by the Distributor; 0 is a free Record.
+- `purchased_at_ms` comes from Sui's `Clock`.
 
 Neither the buyer nor the eventual recipient is stored: the returned Record
 remains composable and may be purchased as a gift, so its current owner is the
-only holder that matters on-chain. Nor is the purchase time: `number` follows
-purchase order within an edition, and indexers that need the buyer or the time can
-read the sender and timestamp of the `RecordPurchasedEvent`'s transaction.
+only holder that matters on-chain. Indexers that need the buyer can read the
+transaction sender of the `RecordPurchasedEvent`.
 
 ## Ownership and extensions
 
@@ -170,7 +173,7 @@ become inaccessible.
 
 All IDs are `ID`. Distributor and Currency are phantom type parameters on the
 event type. Sharing is silent, and distributor events fire only when the set
-changes. Other facts are derivable: the buyer and time are the transaction's,
+changes. Other facts are derivable: the buyer is the transaction's sender,
 and release and edition join from `PressingCreatedEvent` by `pressing_id`.
 Destruction joins to `RecordPurchasedEvent` by `record_id`.
 

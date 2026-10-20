@@ -11,7 +11,7 @@ module record::record;
 // === Imports ===
 
 use std::type_name::{Self, TypeName};
-use sui::{derived_object, event::emit};
+use sui::{clock::Clock, derived_object, event::emit};
 
 // === Structs ===
 
@@ -27,6 +27,7 @@ public struct Record has key, store {
     purchase_currency: TypeName,
     /// Amount actually paid, including any accepted overpayment.
     purchase_price: u64,
+    purchased_at_ms: u64,
 }
 
 public struct RecordKey(u32) has copy, drop, store;
@@ -75,6 +76,10 @@ public fun purchase_price(self: &Record): u64 {
     self.purchase_price
 }
 
+public fun purchased_at_ms(self: &Record): u64 {
+    self.purchased_at_ms
+}
+
 /// The address of Record `number` in `pressing_id`'s edition.
 public fun derive_address(pressing_id: ID, number: u32): address {
     derived_object::derive_address(pressing_id, RecordKey(number))
@@ -99,6 +104,7 @@ public(package) fun new<Currency>(
     edition: u16,
     number: u32,
     purchase_price: u64,
+    clock: &Clock,
 ): Record {
     let pressing_id = pressing_uid.to_inner();
     Record {
@@ -109,6 +115,7 @@ public(package) fun new<Currency>(
         number,
         purchase_currency: type_name::with_defining_ids<Currency>(),
         purchase_price,
+        purchased_at_ms: clock.timestamp_ms(),
     }
 }
 

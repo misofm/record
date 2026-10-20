@@ -31,7 +31,7 @@ findings.**
 
 - **Record construction is closed.** The production constructor is
   `public(package)`, and only `pressing::press` reaches it. External Distributors
-  cannot select lineage, currency type, timestamp, or Record number.
+  cannot select lineage, currency type, purchase time, or Record number.
 - **Pressing construction is Release-authorized.** `release::uid_mut` rejects a
   mismatched Release cap. `PressingKey(edition)` makes each `(release, edition)`
   canonical and claim-once.
@@ -57,9 +57,9 @@ findings.**
   restricted constructor, so it cannot be copied or stored for later use.
 - **Stored purchase data is internally bound.** Release, Pressing, and edition come
   from the actual Pressing; number comes from its counter; Record ID uses that number;
-  and currency comes from the concrete type. The buyer and purchase time are
-  intentionally not stored; they are the sender and timestamp of the purchase
-  event's transaction. The authorized Distributor supplies the price, which
+  currency comes from the concrete type; and purchase time comes from `Clock`. The
+  buyer is intentionally not stored; it is the transaction sender of the purchase
+  event. The authorized Distributor supplies the price, which
   may be 0 for a free Record, after validating payment. Distributor and Currency are carried by the purchase
   event's phantom type parameters; runtime strings remain only where events
   intentionally snapshot heterogeneous state.
