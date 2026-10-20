@@ -70,11 +70,10 @@ Release
 
 ## Supply
 
-`max_supply` is fixed when the Pressing is created:
-
-`max_supply` is a required positive `u32`; zero is invalid. It caps lifetime
-issuance across all distributors and currencies. Destroying a Record does not
-restore mint capacity. Further issuance beyond the cap requires a new edition.
+`max_supply` is a required positive `u32`, fixed when the Pressing is created. It
+caps lifetime issuance across all distributors and currencies. Destroying a Record
+does not restore mint capacity. Further issuance beyond the cap requires a new
+edition.
 
 The Pressing checks the cap before incrementing `supply`. Failed or unauthorized
 mints do not consume a number because the transaction rolls back atomically.
@@ -164,23 +163,19 @@ become inaccessible.
 
 ## Events
 
-| Event | Facts |
+| Event | Fields |
 |---|---|
-| `PressingCreatedEvent` | Full Pressing snapshot, Pressing/Release admin capability IDs, edition, supply, cap, and distributor types |
-| `PressingDistributorAuthorizedEvent<Distributor>` | Pressing configuration, authorization transition, and set counts; Distributor is a phantom type parameter |
-| `PressingDistributorRevokedEvent<Distributor>` | Pressing configuration, revocation transition, and set counts; Distributor is a phantom type parameter |
-| `RecordPurchasedEvent<Distributor, Currency>` | Full Record purchase provenance, supply transition, and cap; Distributor and Currency are phantom type parameters |
-| `RecordDestroyedEvent` | Destroyed Record, Release and Pressing IDs plus edition and number |
+| `PressingCreatedEvent` | `pressing_id`, `release_id`, `edition`, `max_supply` |
+| `PressingDistributorAuthorizedEvent<Distributor>` | `pressing_id` |
+| `PressingDistributorRevokedEvent<Distributor>` | `pressing_id` |
+| `RecordPurchasedEvent<Distributor, Currency>` | `record_id`, `pressing_id`, `number`, `purchase_price` |
+| `RecordDestroyedEvent` | `record_id` |
 
-Pressing construction emits Created once with initial state and capability provenance.
-Sharing is silent; distributor changes and purchases retain their own events,
-including changes made before sharing.
-
-The runtime `String` snapshot in `PressingCreatedEvent` remains because its
-distributor list may contain heterogeneous defining types. Destruction is
-nongeneric and intentionally omits the Record's historical purchase fields;
-consumers can join `RecordPurchasedEvent` by Record ID when that provenance is
-needed.
+All IDs are `ID`. Distributor and Currency are phantom type parameters on the
+event type. Sharing is silent, and distributor events fire only when the set
+changes. Other facts are derivable: the buyer and time are the transaction's,
+and release and edition join from `PressingCreatedEvent` by `pressing_id`.
+Destruction joins to `RecordPurchasedEvent` by `record_id`.
 
 ## Layout
 
@@ -191,22 +186,14 @@ sources/
   record.move
 tests/
   record_tests.move
+  rich_event_tests_a.move
+  rich_event_tests_b.move
 ```
 
 ## Build
 
 ```bash
-sui move test
+sui move test -e testnet
 ```
 
-This architecture changes the Record layout and mint API, adds Pressing, and removes
-Registry and Settings. It therefore requires a fresh publication. Distributor,
-SDK, and application consumers must migrate to Pressing IDs and edition-local
-Record numbers.
-
 License: Apache-2.0
-
-Mandatory caps and sequential editions change the Pressing layout and public API.
-They require fresh publication and coordinated distributor, SDK, and event-decoder
-updates. Existing publications retain their original rules; derived edition
-namespaces are specific to the defining Record package.

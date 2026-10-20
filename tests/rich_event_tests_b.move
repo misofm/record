@@ -6,6 +6,7 @@ module record::rich_event_tests_b;
 
 use record::pressing::{Self, Pressing};
 use record::record::{Self, Record};
+use std::bcs;
 use std::unit_test::{assert_eq, destroy};
 use sui::clock;
 use sui::event;
@@ -43,21 +44,14 @@ fun purchase_event_is_separated_by_currency_type() {
     let mut ee = event::events_by_type<pressing::RecordPurchasedEvent<Distributor, EUR>>();
     assert_eq!(ue.length(), 1);
     assert_eq!(ee.length(), 1);
-    let (_, _, _, _, _, price, time, before, delta, after, max) =
-        pressing::purchased_event_fields(ue.pop_back());
+    let (_, _, number, price) = pressing::purchased_event_fields(&ue.pop_back());
+    assert_eq!(number, 1);
     assert_eq!(price, 5);
-    assert_eq!(time, 10);
-    assert_eq!(before, 0);
-    assert_eq!(delta, 1);
-    assert_eq!(after, 1);
-    assert_eq!(max, 100);
-    let (_, _, _, _, _, price, time, before, delta, after, _) =
-        pressing::purchased_event_fields(ee.pop_back());
+    let (_, _, number, price) = pressing::purchased_event_fields(&ee.pop_back());
+    assert_eq!(number, 2);
     assert_eq!(price, 7);
-    assert_eq!(time, 20);
-    assert_eq!(before, 1);
-    assert_eq!(delta, 1);
-    assert_eq!(after, 2);
+    assert_eq!(usd.purchased_at_ms(), 10);
+    assert_eq!(eur.purchased_at_ms(), 20);
     usd.destroy();
     eur.destroy();
     destroy(p);
@@ -76,13 +70,8 @@ fun capped_supply_is_lifetime_supply_after_destruction() {
     assert_eq!(second.number(), 2);
     let events = event::events_by_type<pressing::RecordPurchasedEvent<Distributor, USD>>();
     assert_eq!(events.length(), 2);
-    let (_, _, _, _, number, _, _, before, delta, after, max) =
-        pressing::purchased_event_fields(events[1]);
+    let (_, _, number, _) = pressing::purchased_event_fields(&events[1]);
     assert_eq!(number, 2);
-    assert_eq!(before, 1);
-    assert_eq!(delta, 1);
-    assert_eq!(after, 2);
-    assert_eq!(max, 2);
     second.destroy();
     destroy(p);
     destroy(cap);
@@ -99,18 +88,13 @@ fun destruction_event_identifies_only_destroyed_record() {
     transfer::public_transfer(r, @0xB);
     s.next_tx(@0xB);
     let r = s.take_from_sender<Record>();
+    let record_id = object::id(&r);
     r.destroy();
-    let mut events = event::events_by_type<record::RecordDestroyedEvent>();
+    let events = event::events_by_type<record::RecordDestroyedEvent>();
     assert_eq!(events.length(), 1);
-    let event = events.pop_back();
-    assert_eq!(std::bcs::to_bytes(&event).length(), 102);
-    let (record_id, release_id, pressing_id, edition, number) =
-        record::destroyed_event_fields(event);
-    assert!(record_id != @0x0);
-    assert_eq!(release_id, @0xBEEF);
-    assert!(pressing_id != @0x0);
-    assert_eq!(edition, 1);
-    assert_eq!(number, 1);
+    // A single ID: provenance joins from `RecordPurchasedEvent` by record_id.
+    assert_eq!(bcs::to_bytes(&events[0]).length(), 32);
+    assert_eq!(record::destroyed_event_record_id(&events[0]), record_id);
     s.end();
 }
 
