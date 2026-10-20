@@ -20,8 +20,8 @@ findings.**
   immutable `max_supply`, and `VecSet<TypeName>` of authorized Distributors.
 - `PressingAdminCap` authorizes Distributor changes and mutable Pressing extension
   access. It is derived from and bound to one Pressing ID.
-- `pressing::press<Distributor, Currency>` checks the Distributor type, positive
-  purchase price, and optional maximum; allocates the next number; and calls the
+- `pressing::press<Distributor, Currency>` checks the Distributor type and
+  optional maximum; allocates the next number; and calls the
   package-private Record constructor.
 - Every Record ID is claimed from its Pressing at `RecordKey(number)`.
 - Record has `key + store`, so ownership is deliberately composable rather than
@@ -41,8 +41,8 @@ findings.**
 - **The derivation chain is fully scoped.** A Pressing derives from `(release,
   edition)`, and a Record derives from `(pressing, number)`. Equal Record numbers in
   different editions cannot collide.
-- **Failed purchases do not consume numbers.** Authorization, positive purchase
-  price, and maximum supply are checked before mutation. Any later abort rolls the
+- **Failed purchases do not consume numbers.** Authorization and maximum supply
+  are checked before mutation. Any later abort rolls the
   increment and derived-object claim back atomically.
 - **Supply caps are core and immutable.** `none()` is uncapped; `some(n)` requires
   `n > 0`. There is no setter that can weaken or revise the edition's stated cap.
@@ -59,8 +59,8 @@ findings.**
   from the actual Pressing; number comes from its counter; Record ID uses that number;
   and currency comes from the concrete type. The buyer and purchase time are
   intentionally not stored; they are the sender and timestamp of the purchase
-  event's transaction. The authorized Distributor supplies the positive price
-  after validating payment. Distributor and Currency are carried by the purchase
+  event's transaction. The authorized Distributor supplies the price, which
+  may be 0 for a free Record, after validating payment. Distributor and Currency are carried by the purchase
   event's phantom type parameters; runtime strings remain only where events
   intentionally snapshot heterogeneous state.
 - **Distributor storage is intentionally small and inline.** `VecSet` gives simple
@@ -86,7 +86,7 @@ findings.**
 - A compromised Pressing cap can authorize a malicious Distributor or modify
   cap-gated extensions. It cannot rewrite the immutable maximum or directly select a
   Record number through any public API.
-- Currency, positive price, and purchase time are Record invariants. The
+- Currency and price are Record invariants; a price of 0 is a free Record. The
   authorized Distributor must validate that the supplied price equals the payment it
   accepted. Pricing rule, schedule, and final recipient remain Distributor concerns.
 
@@ -110,5 +110,5 @@ IDs, not singleton Registry or Settings IDs.
 Fourteen Move unit tests cover Release-derived Pressing identity, duplicate-edition
 rejection, edition validation, capped and uncapped supply, edition-local sequences,
 Distributor authorization, revocation and replacement, mismatched capabilities,
-positive purchase prices, complete purchase provenance, Record and Pressing
+free Records, complete purchase provenance, Record and Pressing
 extension access, shared Pressings, destruction, and framework public transfer.

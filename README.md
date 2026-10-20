@@ -123,7 +123,7 @@ The package derives or stamps every Record field:
 - `number` is allocated from the Pressing's edition-local sequence.
 - The Record UID is claimed at `RecordKey(number)` from the Pressing UID.
 - `purchase_currency` comes from the Distributor's concrete `Currency` type.
-- `purchase_price` is the positive amount validated by the Distributor.
+- `purchase_price` is the amount validated by the Distributor; 0 is a free Record.
 
 Neither the buyer nor the eventual recipient is stored: the returned Record
 remains composable and may be purchased as a gift, so its current owner is the

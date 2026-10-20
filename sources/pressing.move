@@ -23,8 +23,7 @@ const EInvalidEdition: u64 = 1;
 const EInvalidMaxSupply: u64 = 2;
 const EDistributorNotAuthorized: u64 = 3;
 const EMaxSupplyReached: u64 = 4;
-const EInvalidPurchasePrice: u64 = 5;
-const EPreviousEditionMissing: u64 = 6;
+const EPreviousEditionMissing: u64 = 5;
 
 // === Structs ===
 
@@ -122,13 +121,13 @@ public fun share(self: Pressing) {
 
 /// Presses the next Record for an authorized distributor witness. The caller
 /// cannot choose the number; the distributor delivers the returned Record.
+/// `purchase_price` may be 0 for a free Record.
 public fun press<Distributor: drop, Currency>(
     self: &mut Pressing,
     _: Distributor,
     purchase_price: u64,
 ): Record {
     assert!(self.is_distributor_authorized<Distributor>(), EDistributorNotAuthorized);
-    assert!(purchase_price > 0, EInvalidPurchasePrice);
     assert!(self.supply < self.max_supply, EMaxSupplyReached);
 
     self.supply = self.supply + 1;

@@ -234,13 +234,16 @@ fun capped_pressing_rejects_the_next_record_after_its_maximum() {
     destroy(admin_cap);
 }
 
-#[test, expected_failure(abort_code = pressing::EInvalidPurchasePrice, location = pressing)]
-fun authorized_distributor_cannot_purchase_a_zero_price_record() {
+#[test]
+fun authorized_distributor_presses_a_free_record() {
     let mut ctx = tx_context::dummy();
     let (mut pressing, admin_cap) =
         pressing::new_for_testing(id(@0xBEEF), 1, 100, &mut ctx);
     pressing.authorize_distributor<DemoDistributor>(&admin_cap);
     let record = press_record(&mut pressing, demo_distributor(), 0);
+    assert_eq!(record.purchase_price(), 0);
+    assert_eq!(record.number(), 1);
+    assert_eq!(pressing.supply(), 1);
     record.destroy();
     destroy(pressing);
     destroy(admin_cap);
