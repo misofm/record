@@ -11,10 +11,10 @@ module record::pressing;
 
 // === Imports ===
 
-use musicos::release::{Release, ReleaseAdminCap};
-use record::record::{Self, Record};
 use std::type_name::{Self, TypeName};
 use sui::{clock::Clock, derived_object, event::emit, vec_set::{Self, VecSet}};
+use musicos::release::{Release, ReleaseAdminCap};
+use record::record::{Self, Record};
 
 // === Errors ===
 
@@ -46,12 +46,15 @@ public struct PressingAdminCap has key, store {
     pressing_id: ID,
 }
 
+/// Derives a Pressing from its Release, keyed by edition.
 public struct PressingKey(u16) has copy, drop, store;
 
+/// Derives a PressingAdminCap from its Pressing.
 public struct PressingAdminCapKey() has copy, drop, store;
 
 // === Events ===
 
+/// A new edition was created.
 public struct PressingCreatedEvent has copy, drop {
     pressing_id: ID,
     release_id: ID,
@@ -59,15 +62,17 @@ public struct PressingCreatedEvent has copy, drop {
     max_supply: u32,
 }
 
+/// Witness type `Distributor` may now press on this Pressing.
 public struct PressingDistributorAuthorizedEvent<phantom Distributor> has copy, drop {
     pressing_id: ID,
 }
 
+/// Witness type `Distributor` may no longer press on this Pressing.
 public struct PressingDistributorRevokedEvent<phantom Distributor> has copy, drop {
     pressing_id: ID,
 }
 
-/// The buyer is the transaction sender; the time is the transaction's.
+/// A Record was pressed. The buyer is the transaction sender.
 public struct RecordPurchasedEvent<phantom Distributor, phantom Currency> has copy, drop {
     record_id: ID,
     pressing_id: ID,
@@ -152,26 +157,37 @@ public fun press<Distributor: drop, Currency>(
 
 // === View Functions ===
 
+/// The Release this Pressing belongs to.
 public fun release_id(self: &Pressing): ID {
     self.release_id
 }
 
+/// The edition number, starting at 1.
 public fun edition(self: &Pressing): u16 {
     self.edition
 }
 
+/// Records pressed so far; also the last allocated number.
 public fun supply(self: &Pressing): u32 {
     self.supply
 }
 
+/// The immutable lifetime issuance ceiling.
 public fun max_supply(self: &Pressing): u32 {
     self.max_supply
 }
 
+/// Defining types of the authorized distributor witnesses.
+public fun distributors(self: &Pressing): &VecSet<TypeName> {
+    &self.distributors
+}
+
+/// Whether witness type `Distributor` may press.
 public fun is_distributor_authorized<Distributor: drop>(self: &Pressing): bool {
     self.distributors.contains(&type_name::with_defining_ids<Distributor>())
 }
 
+/// The Pressing this cap administers.
 public fun pressing_id(cap: &PressingAdminCap): ID {
     cap.pressing_id
 }
@@ -181,10 +197,12 @@ public fun derive_address(release_id: ID, edition: u16): address {
     derived_object::derive_address(release_id, PressingKey(edition))
 }
 
+/// The address of the admin cap derived from `pressing_id`.
 public fun derive_admin_cap_address(pressing_id: ID): address {
     derived_object::derive_address(pressing_id, PressingAdminCapKey())
 }
 
+/// Read access to the Pressing's UID (dynamic fields).
 public fun uid(self: &Pressing): &UID {
     &self.id
 }
@@ -249,6 +267,11 @@ public fun new_for_testing(
         distributors: vec_set::empty(),
     };
     (pressing, admin_cap)
+}
+
+#[test_only]
+public fun set_supply_for_testing(self: &mut Pressing, supply: u32) {
+    self.supply = supply;
 }
 
 #[test_only]

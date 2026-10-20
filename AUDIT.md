@@ -1,12 +1,6 @@
 # Security Review — `record`
 
-> Historical review: the verdict below predates mandatory caps, sequential
-> edition creation, and slimmed events. References to optional caps, `none()`,
-> and the test count are as of 2026-09-01: `max_supply` is now a required
-> positive `u32`, and the suite has grown. The current changes require a fresh
-> review; see the README and tests for the new invariants.
-
-**Revision:** working tree · **Date:** 2026-09-01 · **Toolchain:** Sui 1.78.1
+**Date:** 2026-10-20 · **Toolchain:** Sui 1.82.1
 
 Review of edition-scoped Pressings, Distributor authorization, and composable
 Records. Verdict: **safe under the documented capability and witness model — no
@@ -14,101 +8,76 @@ findings.**
 
 ## Security model
 
-- `pressing::new` requires a Release's matching `ReleaseAdminCap` and claims
-  `PressingKey(edition)` from that Release's UID.
-- Every Pressing owns one edition's monotonically increasing `supply`, optional
-  immutable `max_supply`, and `VecSet<TypeName>` of authorized Distributors.
-- `PressingAdminCap` authorizes Distributor changes and mutable Pressing extension
-  access. It is derived from and bound to one Pressing ID.
-- `pressing::press<Distributor, Currency>` checks the Distributor type and
-  optional maximum; allocates the next number; and calls the
-  package-private Record constructor.
+- `pressing::new` requires the Release's matching `ReleaseAdminCap` and claims
+  `PressingKey(edition)` from that Release's UID. Editions start at 1 and are
+  created in order (`EPreviousEditionMissing`).
+- Every Pressing owns one edition's monotonically increasing `supply`, a required
+  positive immutable `max_supply: u32`, and a `VecSet<TypeName>` of authorized
+  Distributors.
+- `PressingAdminCap` is derived from and bound to one Pressing ID. It authorizes
+  Distributor changes and mutable Pressing UID access.
+- `pressing::press<Distributor, Currency>` checks the Distributor type and the
+  supply cap, allocates the next number, and calls the package-private Record
+  constructor.
 - Every Record ID is claimed from its Pressing at `RecordKey(number)`.
-- Record has `key + store`, so ownership is deliberately composable rather than
-  module-restricted.
+- Record has `key + store`, so ownership is deliberately composable.
 
 ## Checks performed
 
-- **Record construction is closed.** The production constructor is
-  `public(package)`, and only `pressing::press` reaches it. External Distributors
-  cannot select lineage, currency type, purchase time, or Record number.
+- **Record construction is closed.** `record::new` is `public(package)` and only
+  `pressing::press` reaches it. Distributors cannot select lineage, currency type,
+  purchase time, or Record number.
 - **Pressing construction is Release-authorized.** `release::uid_mut` rejects a
   mismatched Release cap. `PressingKey(edition)` makes each `(release, edition)`
-  canonical and claim-once.
-- **Numbers are edition-local and cannot be caller-selected.** Each Pressing starts
-  at zero and allocates `1, 2, 3…` internally. Different editions use independent
-  Pressing objects and independent sequences.
-- **The derivation chain is fully scoped.** A Pressing derives from `(release,
-  edition)`, and a Record derives from `(pressing, number)`. Equal Record numbers in
-  different editions cannot collide.
-- **Failed purchases do not consume numbers.** Authorization and maximum supply
-  are checked before mutation. Any later abort rolls the
-  increment and derived-object claim back atomically.
-- **Supply caps are core and immutable.** `none()` is uncapped; `some(n)` requires
-  `n > 0`. There is no setter that can weaken or revise the edition's stated cap.
-- **Distributor identity is exact and edition-scoped.** Authorization and pressing both
-  use `type_name::with_defining_ids<Distributor>()`. A separately published
-  identically named type is not authorized accidentally, and authorization on one
-  Pressing grants nothing on another.
-- **Distributor rotation preserves identity.** Multiple types may coexist. Adding a
-  replacement before revoking the old type retains the same Pressing, supply, and
-  Record namespace. Add and revoke operations are idempotent.
-- **Witness values are consumed.** A recommended witness has only `drop` and a
-  restricted constructor, so it cannot be copied or stored for later use.
+  claim-once. Pressings can be created before or after the Release is published.
+- **Numbers are edition-local and not caller-selected.** Each Pressing allocates
+  `1, 2, 3…` internally; equal numbers in different editions derive different IDs.
+- **Failed purchases do not consume numbers.** Authorization and the cap are
+  checked before mutation; any later abort rolls back atomically.
+- **Supply caps are immutable.** `max_supply` must be positive and has no setter.
+  Destroying a Record does not restore capacity. `u32::MAX` is accepted.
+- **Distributor identity is exact and edition-scoped.** Authorization and pressing
+  both use `type_name::with_defining_ids<Distributor>()`. Authorization on one
+  Pressing grants nothing on another. Add and revoke are idempotent and emit an
+  event only when the set changes.
+- **Witness values are consumed.** A Distributor witness should have only `drop`
+  and a module-restricted constructor.
 - **Stored purchase data is internally bound.** Release, Pressing, and edition come
-  from the actual Pressing; number comes from its counter; Record ID uses that number;
-  currency comes from the concrete type; and purchase time comes from `Clock`. The
-  buyer is intentionally not stored; it is the transaction sender of the purchase
-  event. The authorized Distributor supplies the price, which
-  may be 0 for a free Record, after validating payment. Distributor and Currency are carried by the purchase
-  event's phantom type parameters; runtime strings remain only where events
-  intentionally snapshot heterogeneous state.
-- **Distributor storage is intentionally small and inline.** `VecSet` gives simple
-  duplicate-free membership. Its O(n) behavior is appropriate for a handful of
-  issuance paths; it is not intended as an unbounded registry.
+  from the Pressing; number from its counter; currency from the concrete type;
+  purchase time from `Clock`. The authorized Distributor supplies the price after
+  validating payment; 0 is a free Record. The buyer is the purchase transaction's
+  sender and is not stored.
+- **Distributor storage is small and inline.** `VecSet` membership is O(n), suited
+  to a handful of issuance paths, not an unbounded registry.
 - **Pressings are permanent.** There is no destructor that could strand the derived
-  Record namespace. Mutable UID access requires the matching Pressing cap.
-- **Ownership is explicitly unrestricted.** Record exposes no redundant transfer
-  wrapper. Its `store` ability permits framework transfer, wrapping, sharing, and
-  freezing.
-- **Immutable borrowing is not ownership proof.** Shared and frozen Records may be
-  passed by immutable reference by non-owners. Downstream access policies must prove
-  an acceptable ownership mode separately.
-- **Extension authority follows mutable access.** `uid_mut` is intentionally open.
-  Sharing a Record therefore makes extension mutation public as well.
+  Record namespace.
+- **Ownership is unrestricted.** `store` permits framework transfer, wrapping,
+  sharing, and freezing. An immutable `&Record` is not ownership proof.
+- **Extension authority follows mutable access.** `Record::uid_mut` is open, so
+  sharing a Record makes extension mutation public. `Pressing::uid_mut` is
+  cap-gated.
 
 ## Deliberate tradeoffs
 
-- Every press mutates its Pressing because `supply` is the sequence. Presses within one
-  edition serialize; unrelated editions do not contend on a global root.
-- Distributor authorization is deliberately per Pressing. There is no package-wide
-  kill switch; revocation must be applied to each affected edition.
+- Every press mutates its Pressing; presses within one edition serialize, unrelated
+  editions do not contend.
+- Distributor authorization is per Pressing; there is no package-wide kill switch.
 - A compromised Pressing cap can authorize a malicious Distributor or modify
-  cap-gated extensions. It cannot rewrite the immutable maximum or directly select a
-  Record number through any public API.
-- Currency and price are Record invariants; a price of 0 is a free Record. The
-  authorized Distributor must validate that the supplied price equals the payment it
-  accepted. Pricing rule, schedule, and final recipient remain Distributor concerns.
+  cap-gated extensions. It cannot change `max_supply` or select a Record number.
 
 ## Operational requirements
 
-Each `PressingAdminCap` should use suitable capability custody. Loss prevents
-Distributor rotation and cap-authorized extension changes for that edition;
-compromise permits new issuance paths. A replacement Distributor should be authorized
-and tested before the old witness is revoked.
+Each `PressingAdminCap` needs suitable custody. Loss prevents Distributor rotation;
+compromise permits new issuance paths. Authorize a replacement Distributor before
+revoking the old one. Never authorize a publicly constructible witness.
 
-Distributor witnesses must have restricted constructors and must never be returned or
-stored. Authorizing a publicly constructible witness would make pressing permissionless
-until that type is revoked.
-
-Clients can derive every Pressing and Record ID from `(release_id, edition, number)`.
-Deployment configuration therefore tracks active Pressing IDs and Distributor package
-IDs, not singleton Registry or Settings IDs.
+Clients derive every Pressing and Record ID from `(release_id, edition, number)`.
 
 ## Verification
 
-Fourteen Move unit tests cover Release-derived Pressing identity, duplicate-edition
-rejection, edition validation, capped and uncapped supply, edition-local sequences,
-Distributor authorization, revocation and replacement, mismatched capabilities,
-free Records, complete purchase provenance, Record and Pressing
-extension access, shared Pressings, destruction, and framework public transfer.
+40 Move unit tests, 100% line coverage. They cover Release-derived Pressing
+identity (unpublished and published Releases), duplicate and out-of-order editions,
+mismatched Release and Pressing caps, zero and `u32::MAX` supply caps, edition-local
+sequences, Distributor authorization, revocation and replacement, free and
+`u64::MAX` prices, per-currency provenance, events, extensions, shared Pressings,
+destruction, and framework public transfer.

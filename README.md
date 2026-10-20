@@ -185,9 +185,8 @@ sources/
   pressing.move
   record.move
 tests/
+  pressing_event_tests.move
   record_tests.move
-  rich_event_tests_a.move
-  rich_event_tests_b.move
 ```
 
 ## Build

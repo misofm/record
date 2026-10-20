@@ -30,11 +30,12 @@ public struct Record has key, store {
     purchased_at_ms: u64,
 }
 
+/// Derives a Record from its Pressing, keyed by number.
 public struct RecordKey(u32) has copy, drop, store;
 
 // === Events ===
 
-/// Purchase provenance is in the matching `RecordPurchasedEvent`.
+/// A Record was destroyed. Provenance joins from `RecordPurchasedEvent`.
 public struct RecordDestroyedEvent has copy, drop {
     record_id: ID,
 }
@@ -52,30 +53,37 @@ public fun destroy(self: Record) {
 
 // === View Functions ===
 
+/// The Release this Record belongs to.
 public fun release_id(self: &Record): ID {
     self.release_id
 }
 
+/// The Pressing (edition) this Record was pressed from.
 public fun pressing_id(self: &Record): ID {
     self.pressing_id
 }
 
+/// The edition number.
 public fun edition(self: &Record): u16 {
     self.edition
 }
 
+/// The edition-local number, starting at 1.
 public fun number(self: &Record): u32 {
     self.number
 }
 
+/// Defining type of the purchase currency.
 public fun purchase_currency(self: &Record): TypeName {
     self.purchase_currency
 }
 
+/// Amount paid; 0 for a free Record.
 public fun purchase_price(self: &Record): u64 {
     self.purchase_price
 }
 
+/// Clock time of the purchase.
 public fun purchased_at_ms(self: &Record): u64 {
     self.purchased_at_ms
 }
@@ -85,6 +93,7 @@ public fun derive_address(pressing_id: ID, number: u32): address {
     derived_object::derive_address(pressing_id, RecordKey(number))
 }
 
+/// Read access to the Record's UID (dynamic fields).
 public fun uid(self: &Record): &UID {
     &self.id
 }
@@ -94,7 +103,7 @@ public fun uid_mut(self: &mut Record): &mut UID {
     &mut self.id
 }
 
-// === Package Functions ===
+// === Private Functions ===
 
 /// Creates Record `number`. Only `pressing::press` calls this, after checking
 /// distributor authorization and supply.
