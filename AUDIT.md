@@ -20,7 +20,7 @@ findings.**
   immutable `max_supply`, and `VecSet<TypeName>` of authorized Distributors.
 - `PressingAdminCap` authorizes Distributor changes and mutable Pressing extension
   access. It is derived from and bound to one Pressing ID.
-- `pressing::mint<Distributor, Currency>` checks the Distributor type, positive
+- `pressing::press<Distributor, Currency>` checks the Distributor type, positive
   purchase price, and optional maximum; allocates the next number; and calls the
   package-private Record constructor.
 - Every Record ID is claimed from its Pressing at `RecordKey(number)`.
@@ -30,7 +30,7 @@ findings.**
 ## Checks performed
 
 - **Record construction is closed.** The production constructor is
-  `public(package)`, and only `pressing::mint` reaches it. External Distributors
+  `public(package)`, and only `pressing::press` reaches it. External Distributors
   cannot select lineage, currency type, timestamp, or Record number.
 - **Pressing construction is Release-authorized.** `release::uid_mut` rejects a
   mismatched Release cap. `PressingKey(edition)` makes each `(release, edition)`
@@ -46,7 +46,7 @@ findings.**
   increment and derived-object claim back atomically.
 - **Supply caps are core and immutable.** `none()` is uncapped; `some(n)` requires
   `n > 0`. There is no setter that can weaken or revise the edition's stated cap.
-- **Distributor identity is exact and edition-scoped.** Authorization and mint both
+- **Distributor identity is exact and edition-scoped.** Authorization and pressing both
   use `type_name::with_defining_ids<Distributor>()`. A separately published
   identically named type is not authorized accidentally, and authorization on one
   Pressing grants nothing on another.
@@ -54,7 +54,7 @@ findings.**
   replacement before revoking the old type retains the same Pressing, supply, and
   Record namespace. Add and revoke operations are idempotent.
 - **Witness values are consumed.** A recommended witness has only `drop` and a
-  restricted constructor, so it cannot be copied or stored for later minting.
+  restricted constructor, so it cannot be copied or stored for later use.
 - **Stored purchase data is internally bound.** Release, Pressing, and edition come
   from the actual Pressing; number comes from its counter; Record ID uses that number;
   and currency comes from the concrete type. The buyer and purchase time are
@@ -79,7 +79,7 @@ findings.**
 
 ## Deliberate tradeoffs
 
-- Every mint mutates its Pressing because `supply` is the sequence. Mints within one
+- Every press mutates its Pressing because `supply` is the sequence. Presses within one
   edition serialize; unrelated editions do not contend on a global root.
 - Distributor authorization is deliberately per Pressing. There is no package-wide
   kill switch; revocation must be applied to each affected edition.
@@ -98,7 +98,7 @@ compromise permits new issuance paths. A replacement Distributor should be autho
 and tested before the old witness is revoked.
 
 Distributor witnesses must have restricted constructors and must never be returned or
-stored. Authorizing a publicly constructible witness would make minting permissionless
+stored. Authorizing a publicly constructible witness would make pressing permissionless
 until that type is revoked.
 
 Clients can derive every Pressing and Record ID from `(release_id, edition, number)`.

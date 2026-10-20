@@ -71,11 +71,11 @@ Release
 
 `max_supply` is a required positive `u32`, fixed when the Pressing is created. It
 caps lifetime issuance across all distributors and currencies. Destroying a Record
-does not restore mint capacity. Further issuance beyond the cap requires a new
+does not restore capacity. Further issuance beyond the cap requires a new
 edition.
 
 The Pressing checks the cap before incrementing `supply`. Failed or unauthorized
-mints do not consume a number because the transaction rolls back atomically.
+presses do not consume a number because the transaction rolls back atomically.
 
 ## Distributors
 
@@ -99,14 +99,14 @@ public fun purchase<Currency>(
     pressing: &mut Pressing,
     purchase_price: u64,
 ): Record {
-    pressing.mint<DistributorWitness, Currency>(
+    pressing.press<DistributorWitness, Currency>(
         DistributorWitness(),
         purchase_price,
     )
 }
 ```
 
-`mint` returns the Record rather than transferring it. The Distributor remains free
+`press` returns the Record rather than transferring it. The Distributor remains free
 to deliver it through any composable transaction flow. The Distributor validates
 payment and sale state; `record` stores the resulting purchase provenance.
 

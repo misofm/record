@@ -22,8 +22,8 @@ fun release(ctx: &mut TxContext): (Release, ReleaseAdminCap) {
     release::new_for_testing(vector[], ctx)
 }
 
-fun mint(p: &mut Pressing, price: u64): Record {
-    p.mint<Distributor, USD>(Distributor(), price)
+fun press(p: &mut Pressing, price: u64): Record {
+    p.press<Distributor, USD>(Distributor(), price)
 }
 
 #[test]
@@ -53,7 +53,7 @@ fun sharing_is_silent_and_preserves_config_and_supply() {
     let (mut p, cap) = pressing::new_for_testing(ident(@0xBEEF), 2, 100, scenario.ctx());
     let p_id = object::id(&p);
     p.authorize_distributor<Distributor>(&cap);
-    let r = mint(&mut p, 9);
+    let r = press(&mut p, 9);
     r.destroy();
     let event_count = event::num_events();
     p.share();
@@ -96,7 +96,7 @@ fun view_and_uid_borrows_are_event_silent() {
     let mut c = tx_context::dummy();
     let (mut p, cap) = pressing::new_for_testing(ident(@0xBEEF), 1, 100, &mut c);
     p.authorize_distributor<Distributor>(&cap);
-    let r = mint(&mut p, 3);
+    let r = press(&mut p, 3);
     let _ = p.release_id();
     let _ = p.edition();
     let _ = p.supply();

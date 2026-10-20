@@ -49,16 +49,16 @@ fun a_release(ctx: &mut TxContext): (Release, ReleaseAdminCap) {
     release::new_for_testing(vector[], ctx)
 }
 
-fun mint_record<Distributor: drop>(
+fun press_record<Distributor: drop>(
     pressing: &mut Pressing,
     distributor: Distributor,
     purchase_price: u64,
 ): Record {
-    pressing.mint<Distributor, USD>(distributor, purchase_price)
+    pressing.press<Distributor, USD>(distributor, purchase_price)
 }
 
 #[test]
-fun authorized_distributor_mints_a_self_describing_extensible_record() {
+fun authorized_distributor_presses_a_self_describing_extensible_record() {
     let mut ctx = tx_context::new_from_hint(@0xA, 0, 0, 0, 0);
     let release_id = id(@0xBEEF);
     let (mut pressing, admin_cap) =
@@ -67,7 +67,7 @@ fun authorized_distributor_mints_a_self_describing_extensible_record() {
     let pressing_id = object::id(&pressing);
     let purchase_price = 25;
 
-    let mut r = mint_record(&mut pressing, demo_distributor(), purchase_price);
+    let mut r = press_record(&mut pressing, demo_distributor(), purchase_price);
 
     assert_eq!(r.release_id(), release_id);
     assert_eq!(r.pressing_id(), pressing_id);
@@ -115,9 +115,9 @@ fun pressings_allocate_edition_local_sequences() {
     first_pressing.authorize_distributor<DemoDistributor>(&first_cap);
     second_pressing.authorize_distributor<DemoDistributor>(&second_cap);
 
-    let first = mint_record(&mut first_pressing, demo_distributor(), 1);
-    let second = mint_record(&mut second_pressing, demo_distributor(), 1);
-    let third = mint_record(&mut first_pressing, demo_distributor(), 1);
+    let first = press_record(&mut first_pressing, demo_distributor(), 1);
+    let second = press_record(&mut second_pressing, demo_distributor(), 1);
+    let third = press_record(&mut first_pressing, demo_distributor(), 1);
 
     assert_eq!(first.number(), 1);
     assert_eq!(second.number(), 1);
@@ -149,13 +149,13 @@ fun distributor_replacement_continues_the_pressing_sequence() {
 
     pressing.authorize_distributor<DemoDistributor>(&admin_cap);
     pressing.authorize_distributor<DemoDistributor>(&admin_cap);
-    let first = mint_record(&mut pressing, demo_distributor(), 1);
+    let first = press_record(&mut pressing, demo_distributor(), 1);
 
     pressing.authorize_distributor<ReplacementDistributor>(&admin_cap);
-    let second = mint_record(&mut pressing, replacement_distributor(), 1);
+    let second = press_record(&mut pressing, replacement_distributor(), 1);
     pressing.revoke_distributor<DemoDistributor>(&admin_cap);
     pressing.revoke_distributor<DemoDistributor>(&admin_cap);
-    let third = mint_record(&mut pressing, replacement_distributor(), 1);
+    let third = press_record(&mut pressing, replacement_distributor(), 1);
 
     assert_eq!(first.number(), 1);
     assert_eq!(second.number(), 2);
@@ -192,11 +192,11 @@ fun distributor_replacement_continues_the_pressing_sequence() {
     abort_code = pressing::EDistributorNotAuthorized,
     location = pressing,
 )]
-fun unauthorized_distributor_cannot_mint() {
+fun unauthorized_distributor_cannot_press() {
     let mut ctx = tx_context::dummy();
     let (mut pressing, admin_cap) =
         pressing::new_for_testing(id(@0xBEEF), 1, 100, &mut ctx);
-    let record = mint_record(&mut pressing, impostor_distributor(), 1);
+    let record = press_record(&mut pressing, impostor_distributor(), 1);
     record.destroy();
     destroy(pressing);
     destroy(admin_cap);
@@ -206,13 +206,13 @@ fun unauthorized_distributor_cannot_mint() {
     abort_code = pressing::EDistributorNotAuthorized,
     location = pressing,
 )]
-fun revoked_distributor_cannot_mint() {
+fun revoked_distributor_cannot_press() {
     let mut ctx = tx_context::dummy();
     let (mut pressing, admin_cap) =
         pressing::new_for_testing(id(@0xBEEF), 1, 100, &mut ctx);
     pressing.authorize_distributor<DemoDistributor>(&admin_cap);
     pressing.revoke_distributor<DemoDistributor>(&admin_cap);
-    let record = mint_record(&mut pressing, demo_distributor(), 1);
+    let record = press_record(&mut pressing, demo_distributor(), 1);
     record.destroy();
     destroy(pressing);
     destroy(admin_cap);
@@ -224,11 +224,11 @@ fun capped_pressing_rejects_the_next_record_after_its_maximum() {
     let (mut pressing, admin_cap) =
         pressing::new_for_testing(id(@0xBEEF), 1, 2, &mut ctx);
     pressing.authorize_distributor<DemoDistributor>(&admin_cap);
-    let first = mint_record(&mut pressing, demo_distributor(), 1);
-    let second = mint_record(&mut pressing, demo_distributor(), 1);
+    let first = press_record(&mut pressing, demo_distributor(), 1);
+    let second = press_record(&mut pressing, demo_distributor(), 1);
     first.destroy();
     second.destroy();
-    let record = mint_record(&mut pressing, demo_distributor(), 1);
+    let record = press_record(&mut pressing, demo_distributor(), 1);
     record.destroy();
     destroy(pressing);
     destroy(admin_cap);
@@ -240,7 +240,7 @@ fun authorized_distributor_cannot_purchase_a_zero_price_record() {
     let (mut pressing, admin_cap) =
         pressing::new_for_testing(id(@0xBEEF), 1, 100, &mut ctx);
     pressing.authorize_distributor<DemoDistributor>(&admin_cap);
-    let record = mint_record(&mut pressing, demo_distributor(), 0);
+    let record = press_record(&mut pressing, demo_distributor(), 0);
     record.destroy();
     destroy(pressing);
     destroy(admin_cap);
@@ -364,7 +364,7 @@ fun record_supports_framework_public_transfer() {
     let (mut pressing, admin_cap) =
         pressing::new_for_testing(id(@0xBEEF), 1, 100, scenario.ctx());
     pressing.authorize_distributor<DemoDistributor>(&admin_cap);
-    let record = mint_record(&mut pressing, demo_distributor(), 1);
+    let record = press_record(&mut pressing, demo_distributor(), 1);
     let record_id = object::id(&record);
 
     destroy(pressing);
@@ -451,10 +451,10 @@ fun distributor_rotation_cannot_reset_the_supply_cap() {
     let mut ctx = tx_context::dummy();
     let (mut p, cap) = pressing::new_for_testing(id(@0xBEEF), 1, 1, &mut ctx);
     p.authorize_distributor<DemoDistributor>(&cap);
-    mint_record(&mut p, demo_distributor(), 1).destroy();
+    press_record(&mut p, demo_distributor(), 1).destroy();
     p.revoke_distributor<DemoDistributor>(&cap);
     p.authorize_distributor<ReplacementDistributor>(&cap);
-    mint_record(&mut p, replacement_distributor(), 1).destroy();
+    press_record(&mut p, replacement_distributor(), 1).destroy();
     destroy(p);
     destroy(cap);
 }
@@ -465,7 +465,7 @@ fun boundary_editions_preserve_record_and_event_provenance() {
     vector[1u16, 65_535u16].do!(|edition| {
         let (mut p, cap) = pressing::new_for_testing(id(@0xBEEF), edition, 1, &mut ctx);
         p.authorize_distributor<DemoDistributor>(&cap);
-        let r = mint_record(&mut p, demo_distributor(), 1);
+        let r = press_record(&mut p, demo_distributor(), 1);
         assert_eq!(p.edition(), edition);
         assert_eq!(r.edition(), edition);
         let mut events =

@@ -28,8 +28,8 @@
 
 ## Design consequences
 
-- Mints within one edition serialize on that Pressing's counter. Different editions
-  can mint independently.
+- Presses within one edition serialize on that Pressing's counter. Different editions
+  can press independently.
 - A Distributor replacement preserves the Pressing ID and its sequence. Authorize the
   replacement before revoking the old type.
 - Distributor packages own payment validation, pricing rules, schedules, and delivery
@@ -43,7 +43,7 @@
 
 - [ ] Replace the old `miso_pressing` package with one or more Distributor packages.
 - [ ] Update Distributor calls to use
-      `pressing::mint<Distributor, Currency>(witness, price)`.
+      `pressing::press<Distributor, Currency>(witness, price)`.
 - [ ] Update SDK/application transaction construction with `pressing_id` and edition.
 - [ ] Redesign the Record Seal policy's ownership proof for `key + store`.
 - [ ] Add a migration Distributor for Records from earlier package publications.

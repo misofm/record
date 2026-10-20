@@ -6,7 +6,7 @@
 /// A Pressing derives from its Release at `PressingKey(edition)`. Editions start
 /// at 1 and are created in order. Each Pressing owns an edition-local Record
 /// sequence, a positive immutable `max_supply`, and the distributor witness
-/// types allowed to mint. Distributors own delivery mechanics.
+/// types allowed to press Records. Distributors own delivery mechanics.
 module record::pressing;
 
 // === Imports ===
@@ -37,7 +37,7 @@ public struct Pressing has key {
     supply: u32,
     /// Positive, immutable lifetime issuance ceiling.
     max_supply: u32,
-    /// Defining types of the distributor witnesses allowed to mint.
+    /// Defining types of the distributor witnesses allowed to press.
     distributors: VecSet<TypeName>,
 }
 
@@ -120,9 +120,9 @@ public fun share(self: Pressing) {
     transfer::share_object(self);
 }
 
-/// Mints the next Record for an authorized distributor witness. The caller
+/// Presses the next Record for an authorized distributor witness. The caller
 /// cannot choose the number; the distributor delivers the returned Record.
-public fun mint<Distributor: drop, Currency>(
+public fun press<Distributor: drop, Currency>(
     self: &mut Pressing,
     _: Distributor,
     purchase_price: u64,
@@ -190,7 +190,7 @@ public fun uid(self: &Pressing): &UID {
 
 // === Admin Functions ===
 
-/// Authorizes witness type `Distributor` to mint. Idempotent.
+/// Authorizes witness type `Distributor` to press. Idempotent.
 public fun authorize_distributor<Distributor: drop>(
     self: &mut Pressing,
     cap: &PressingAdminCap,

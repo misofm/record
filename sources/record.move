@@ -91,7 +91,7 @@ public fun uid_mut(self: &mut Record): &mut UID {
 
 // === Package Functions ===
 
-/// Mints Record `number`. Only `pressing::mint` calls this, after checking
+/// Creates Record `number`. Only `pressing::press` calls this, after checking
 /// distributor authorization and supply.
 public(package) fun new<Currency>(
     pressing_uid: &mut UID,
