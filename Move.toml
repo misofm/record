@@ -5,4 +5,4 @@ license = "FSL-1.1-ALv2"
 authors = ["Miso Labs, Inc. (build@miso.fm)"]
 
 [dependencies]
-miso_music = { git = "https://github.com/misofm/music-protocol.git", rev = "c5a4a3f78eca20c225ff702750b54da5c754fe4c" }
+miso_music = { git = "https://github.com/misofm/music-protocol.git", rev = "f52e79db4f44e9c59f277c4291c2b167295d002b" }
