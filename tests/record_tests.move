@@ -11,19 +11,14 @@ use record::{pressing::{Self, Pressing}, record::{Self, Record}};
 
 const PURCHASED_AT_MS: u64 = 1_726_000_123;
 
-/// Stand-in for an authorized distributor package's module-controlled witness.
 public struct DemoDistributor() has drop;
 
-/// Stand-in for a replacement or concurrent distributor package.
 public struct ReplacementDistributor() has drop;
 
-/// A distributor witness type that is never authorized.
 public struct ImpostorDistributor() has drop;
 
-/// Stand-in for the currency used to purchase Records.
 public struct USD() has drop;
 
-/// Stand-in for an extension's module-private dynamic-field key.
 public struct DemoKey() has copy, drop, store;
 
 fun id(addr: address): ID {

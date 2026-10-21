@@ -27,7 +27,6 @@ const EPreviousEditionMissing: u64 = 5;
 
 // === Structs ===
 
-/// One edition's Record namespace, supply, cap, and authorized distributors.
 public struct Pressing has key {
     id: UID,
     release_id: ID,
@@ -46,15 +45,12 @@ public struct PressingAdminCap has key, store {
     pressing_id: ID,
 }
 
-/// Derives a Pressing from its Release, keyed by edition.
 public struct PressingKey(u16) has copy, drop, store;
 
-/// Derives a PressingAdminCap from its Pressing.
 public struct PressingAdminCapKey() has copy, drop, store;
 
 // === Events ===
 
-/// A new edition was created, with its admin cap.
 public struct PressingCreatedEvent has copy, drop {
     pressing_id: ID,
     admin_cap_id: ID,
@@ -63,18 +59,16 @@ public struct PressingCreatedEvent has copy, drop {
     max_supply: u32,
 }
 
-/// Witness type `Distributor` may now press on this Pressing.
 public struct PressingDistributorAuthorizedEvent<phantom Distributor> has copy, drop {
     pressing_id: ID,
 }
 
-/// Witness type `Distributor` may no longer press on this Pressing.
 public struct PressingDistributorRevokedEvent<phantom Distributor> has copy, drop {
     pressing_id: ID,
 }
 
-/// A Record was pressed; `number` is also the Pressing's new supply. The
-/// buyer is the transaction sender.
+/// `number` is also the Pressing's new supply. The buyer is the transaction
+/// sender.
 public struct RecordPurchasedEvent<phantom Distributor, phantom Currency> has copy, drop {
     record_id: ID,
     pressing_id: ID,
@@ -85,8 +79,6 @@ public struct RecordPurchasedEvent<phantom Distributor, phantom Currency> has co
 
 // === Public Functions ===
 
-/// Creates `edition` of the Release. Aborts unless `edition` is 1 or the
-/// previous edition exists, and unless `max_supply` is positive.
 public fun new(
     release: &mut Release,
     release_cap: &ReleaseAdminCap,
@@ -133,9 +125,8 @@ public fun share(self: Pressing) {
     transfer::share_object(self);
 }
 
-/// Presses the next Record for an authorized distributor witness. The caller
-/// cannot choose the number; the distributor delivers the returned Record.
-/// `purchase_price` may be 0 for a free Record.
+/// The caller cannot choose the number; the distributor delivers the returned
+/// Record. `purchase_price` may be 0 for a free Record.
 public fun press<Distributor: drop, Currency>(
     self: &mut Pressing,
     _: Distributor,
@@ -167,59 +158,51 @@ public fun press<Distributor: drop, Currency>(
 
 // === View Functions ===
 
-/// The Release this Pressing belongs to.
 public fun release_id(self: &Pressing): ID {
     self.release_id
 }
 
-/// The edition number, starting at 1.
+/// Starts at 1.
 public fun edition(self: &Pressing): u16 {
     self.edition
 }
 
-/// Records pressed so far; also the last allocated number.
+/// Also the last allocated number.
 public fun supply(self: &Pressing): u32 {
     self.supply
 }
 
-/// The immutable lifetime issuance ceiling.
 public fun max_supply(self: &Pressing): u32 {
     self.max_supply
 }
 
-/// Defining types of the authorized distributor witnesses.
 public fun distributors(self: &Pressing): &VecSet<TypeName> {
     &self.distributors
 }
 
-/// Whether witness type `Distributor` may press.
 public fun is_distributor_authorized<Distributor: drop>(self: &Pressing): bool {
     self.distributors.contains(&type_name::with_defining_ids<Distributor>())
 }
 
-/// The Pressing this cap administers.
 public fun pressing_id(cap: &PressingAdminCap): ID {
     cap.pressing_id
 }
 
-/// The address of `edition`'s Pressing under `release_id`.
 public fun derive_address(release_id: ID, edition: u16): address {
     derived_object::derive_address(release_id, PressingKey(edition))
 }
 
-/// The address of the admin cap derived from `pressing_id`.
 public fun derive_admin_cap_address(pressing_id: ID): address {
     derived_object::derive_address(pressing_id, PressingAdminCapKey())
 }
 
-/// Read access to the Pressing's UID (dynamic fields).
 public fun uid(self: &Pressing): &UID {
     &self.id
 }
 
 // === Admin Functions ===
 
-/// Authorizes witness type `Distributor` to press. Idempotent.
+/// Idempotent.
 public fun authorize_distributor<Distributor: drop>(
     self: &mut Pressing,
     cap: &PressingAdminCap,
@@ -231,7 +214,7 @@ public fun authorize_distributor<Distributor: drop>(
     emit(PressingDistributorAuthorizedEvent<Distributor> { pressing_id: cap.pressing_id });
 }
 
-/// Revokes witness type `Distributor`. Idempotent.
+/// Idempotent.
 public fun revoke_distributor<Distributor: drop>(self: &mut Pressing, cap: &PressingAdminCap) {
     self.authorize(cap);
     let distributor = type_name::with_defining_ids<Distributor>();
@@ -240,7 +223,7 @@ public fun revoke_distributor<Distributor: drop>(self: &mut Pressing, cap: &Pres
     emit(PressingDistributorRevokedEvent<Distributor> { pressing_id: cap.pressing_id });
 }
 
-/// Cap-gated UID access, e.g. for distributor objects derived from the Pressing.
+/// E.g. for distributor objects derived from the Pressing.
 public fun uid_mut(self: &mut Pressing, cap: &PressingAdminCap): &mut UID {
     self.authorize(cap);
     &mut self.id
