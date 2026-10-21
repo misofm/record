@@ -126,7 +126,7 @@ The package derives or stamps every Record field:
 - `number` is allocated from the Pressing's edition-local sequence.
 - The Record UID is claimed at `RecordKey(number)` from the Pressing UID.
 - `purchase_currency` comes from the Distributor's concrete `Currency` type.
-- `purchase_price` is the amount validated by the Distributor; 0 is a free Record.
+- `purchase_price` is the amount actually paid, validated by the Distributor (including any accepted overpayment); 0 is a free Record.
 - `purchased_at_ms` comes from Sui's `Clock`.
 
 Neither the buyer nor the eventual recipient is stored: the returned Record
@@ -160,6 +160,10 @@ public fun uid_mut(self: &mut Record): &mut UID
 
 Callers must detach extensions before destroying a Record or those dynamic fields
 become inaccessible.
+
+`Record::uid_mut` is open to any holder, so sharing a Record makes extension mutation
+public. `Pressing::uid_mut` requires the `PressingAdminCap` and serves objects derived
+from the Pressing, such as Distributor state.
 
 ## Events
 

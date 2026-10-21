@@ -1,11 +1,6 @@
 // Copyright (c) Miso Labs, Inc.
 // SPDX-License-Identifier: FSL-1.1-ALv2
 
-/// An owned copy from one edition of a Miso release, with its purchase provenance.
-///
-/// `pressing` allocates each Record's number and is the only caller of `new`.
-/// Record IDs derive from `(pressing_id, RecordKey(number))`. Distributor
-/// packages own pricing and payment validation.
 module record::record;
 
 // === Imports ===
@@ -20,11 +15,8 @@ public struct Record has key, store {
     release_id: ID,
     pressing_id: ID,
     edition: u16,
-    /// Edition-local, starting at 1.
     number: u32,
-    /// Defining type of the purchase currency.
     purchase_currency: TypeName,
-    /// Amount actually paid, including any accepted overpayment.
     purchase_price: u64,
     purchased_at_ms: u64,
 }
@@ -33,14 +25,12 @@ public struct RecordKey(u32) has copy, drop, store;
 
 // === Events ===
 
-/// Provenance joins from `RecordPurchasedEvent`.
 public struct RecordDestroyedEvent has copy, drop {
     record_id: ID,
 }
 
 // === Public Functions ===
 
-/// Detach dynamic-field extensions first or they become inaccessible.
 public fun destroy(self: Record) {
     let record_id = object::id(&self);
     let Record { id, .. } = self;
@@ -70,7 +60,6 @@ public fun purchase_currency(self: &Record): TypeName {
     self.purchase_currency
 }
 
-/// 0 for a free Record.
 public fun purchase_price(self: &Record): u64 {
     self.purchase_price
 }
@@ -87,15 +76,12 @@ public fun uid(self: &Record): &UID {
     &self.id
 }
 
-/// Open to any holder: sharing a Record makes extension mutation public.
 public fun uid_mut(self: &mut Record): &mut UID {
     &mut self.id
 }
 
 // === Private Functions ===
 
-/// Only `pressing::press` calls this, after checking distributor authorization
-/// and supply.
 public(package) fun new<Currency>(
     pressing_uid: &mut UID,
     release_id: ID,

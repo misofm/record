@@ -185,7 +185,6 @@ fun destruction_event_identifies_only_destroyed_record() {
     r.destroy();
     let events = event::events_by_type<record::RecordDestroyedEvent>();
     assert_eq!(events.length(), 1);
-    // A single ID: provenance joins from `RecordPurchasedEvent` by record_id.
     assert_eq!(bcs::to_bytes(&events[0]).length(), 32);
     assert_eq!(record::destroyed_event_record_id(&events[0]), record_id);
     s.end();

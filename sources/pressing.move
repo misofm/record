@@ -1,12 +1,6 @@
 // Copyright (c) Miso Labs, Inc.
 // SPDX-License-Identifier: FSL-1.1-ALv2
 
-/// One edition of a Miso release and the issuance boundary for its Records.
-///
-/// A Pressing derives from its Release at `PressingKey(edition)`. Editions start
-/// at 1 and are created in order. Each Pressing owns an edition-local Record
-/// sequence, a positive immutable `max_supply`, and the distributor witness
-/// types allowed to press Records. Distributors own delivery mechanics.
 module record::pressing;
 
 // === Imports ===
@@ -31,15 +25,11 @@ public struct Pressing has key {
     id: UID,
     release_id: ID,
     edition: u16,
-    /// Records issued so far; also the last allocated number.
     supply: u32,
-    /// Positive, immutable lifetime issuance ceiling.
     max_supply: u32,
-    /// Defining types of the distributor witnesses allowed to press.
     distributors: VecSet<TypeName>,
 }
 
-/// Authority over one Pressing's distributors and extensions.
 public struct PressingAdminCap has key, store {
     id: UID,
     pressing_id: ID,
@@ -67,8 +57,6 @@ public struct PressingDistributorRevokedEvent<phantom Distributor> has copy, dro
     pressing_id: ID,
 }
 
-/// `number` is also the Pressing's new supply. The buyer is the transaction
-/// sender.
 public struct RecordPurchasedEvent<phantom Distributor, phantom Currency> has copy, drop {
     record_id: ID,
     pressing_id: ID,
@@ -120,13 +108,10 @@ public fun new(
     (pressing, admin_cap)
 }
 
-/// Shares a Pressing after configuring its distributors.
 public fun share(self: Pressing) {
     transfer::share_object(self);
 }
 
-/// The caller cannot choose the number; the distributor delivers the returned
-/// Record. `purchase_price` may be 0 for a free Record.
 public fun press<Distributor: drop, Currency>(
     self: &mut Pressing,
     _: Distributor,
@@ -162,12 +147,10 @@ public fun release_id(self: &Pressing): ID {
     self.release_id
 }
 
-/// Starts at 1.
 public fun edition(self: &Pressing): u16 {
     self.edition
 }
 
-/// Also the last allocated number.
 public fun supply(self: &Pressing): u32 {
     self.supply
 }
@@ -202,7 +185,6 @@ public fun uid(self: &Pressing): &UID {
 
 // === Admin Functions ===
 
-/// Idempotent.
 public fun authorize_distributor<Distributor: drop>(
     self: &mut Pressing,
     cap: &PressingAdminCap,
@@ -214,7 +196,6 @@ public fun authorize_distributor<Distributor: drop>(
     emit(PressingDistributorAuthorizedEvent<Distributor> { pressing_id: cap.pressing_id });
 }
 
-/// Idempotent.
 public fun revoke_distributor<Distributor: drop>(self: &mut Pressing, cap: &PressingAdminCap) {
     self.authorize(cap);
     let distributor = type_name::with_defining_ids<Distributor>();
@@ -223,7 +204,6 @@ public fun revoke_distributor<Distributor: drop>(self: &mut Pressing, cap: &Pres
     emit(PressingDistributorRevokedEvent<Distributor> { pressing_id: cap.pressing_id });
 }
 
-/// E.g. for distributor objects derived from the Pressing.
 public fun uid_mut(self: &mut Pressing, cap: &PressingAdminCap): &mut UID {
     self.authorize(cap);
     &mut self.id
@@ -237,7 +217,6 @@ fun authorize(self: &Pressing, cap: &PressingAdminCap) {
 
 // === Test Functions ===
 
-/// A Pressing outside any Release, skipping the edition-order check.
 #[test_only]
 public fun new_for_testing(
     release_id: ID,
