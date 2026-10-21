@@ -86,12 +86,13 @@ fun authorized_distributor_presses_a_self_describing_extensible_record() {
     let mut purchased_events =
         event::events_by_type<pressing::RecordPurchasedEvent<DemoDistributor, USD>>();
     assert_eq!(purchased_events.length(), 1);
-    let (event_record_id, event_pressing_id, number, event_purchase_price) =
+    let (event_record_id, event_pressing_id, number, event_purchase_price, purchased_at_ms) =
         pressing::purchased_event_fields(&purchased_events.pop_back());
     assert_eq!(event_record_id, object::id(&r));
     assert_eq!(event_pressing_id, pressing_id);
     assert_eq!(number, 1);
     assert_eq!(event_purchase_price, purchase_price);
+    assert_eq!(purchased_at_ms, PURCHASED_AT_MS);
 
     df::add(r.uid_mut(), DemoKey(), b"extension");
     assert!(df::exists(r.uid(), DemoKey()));
@@ -280,9 +281,10 @@ fun release_derives_one_pressing_per_edition() {
 
     let created = event::events_by_type<pressing::PressingCreatedEvent>();
     assert_eq!(created.length(), 2);
-    let (pressing_id, event_release_id, edition, max_supply) =
+    let (pressing_id, admin_cap_id, event_release_id, edition, max_supply) =
         pressing::created_event_fields(&created[1]);
     assert_eq!(pressing_id, object::id(&second));
+    assert_eq!(admin_cap_id, object::id(&second_cap));
     assert_eq!(event_release_id, release_id);
     assert_eq!(edition, 2);
     assert_eq!(max_supply, 500);
@@ -467,7 +469,8 @@ fun boundary_editions_preserve_record_and_event_provenance() {
         assert_eq!(r.edition(), edition);
         let mut events =
             event::events_by_type<pressing::RecordPurchasedEvent<DemoDistributor, USD>>();
-        let (_, event_pressing_id, _, _) = pressing::purchased_event_fields(&events.pop_back());
+        let (_, event_pressing_id, _, _, _) =
+            pressing::purchased_event_fields(&events.pop_back());
         assert_eq!(event_pressing_id, object::id(&p));
         r.destroy();
         destroy(p);

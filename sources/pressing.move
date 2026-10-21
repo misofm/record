@@ -54,9 +54,10 @@ public struct PressingAdminCapKey() has copy, drop, store;
 
 // === Events ===
 
-/// A new edition was created.
+/// A new edition was created, with its admin cap.
 public struct PressingCreatedEvent has copy, drop {
     pressing_id: ID,
+    admin_cap_id: ID,
     release_id: ID,
     edition: u16,
     max_supply: u32,
@@ -72,12 +73,14 @@ public struct PressingDistributorRevokedEvent<phantom Distributor> has copy, dro
     pressing_id: ID,
 }
 
-/// A Record was pressed. The buyer is the transaction sender.
+/// A Record was pressed; `number` is also the Pressing's new supply. The
+/// buyer is the transaction sender.
 public struct RecordPurchasedEvent<phantom Distributor, phantom Currency> has copy, drop {
     record_id: ID,
     pressing_id: ID,
     number: u32,
     purchase_price: u64,
+    purchased_at_ms: u64,
 }
 
 // === Public Functions ===
@@ -106,7 +109,13 @@ public fun new(
         pressing_id,
     };
 
-    emit(PressingCreatedEvent { pressing_id, release_id, edition, max_supply });
+    emit(PressingCreatedEvent {
+        pressing_id,
+        admin_cap_id: object::id(&admin_cap),
+        release_id,
+        edition,
+        max_supply,
+    });
 
     let pressing = Pressing {
         id,
@@ -151,6 +160,7 @@ public fun press<Distributor: drop, Currency>(
         pressing_id: self.id.to_inner(),
         number,
         purchase_price,
+        purchased_at_ms: record.purchased_at_ms(),
     });
     record
 }
@@ -280,8 +290,8 @@ public fun foreign_admin_cap_for_testing(pressing_id: ID, ctx: &mut TxContext): 
 }
 
 #[test_only]
-public fun created_event_fields(event: &PressingCreatedEvent): (ID, ID, u16, u32) {
-    (event.pressing_id, event.release_id, event.edition, event.max_supply)
+public fun created_event_fields(event: &PressingCreatedEvent): (ID, ID, ID, u16, u32) {
+    (event.pressing_id, event.admin_cap_id, event.release_id, event.edition, event.max_supply)
 }
 
 #[test_only]
@@ -301,6 +311,12 @@ public fun revoked_event_pressing_id<Distributor>(
 #[test_only]
 public fun purchased_event_fields<Distributor, Currency>(
     event: &RecordPurchasedEvent<Distributor, Currency>,
-): (ID, ID, u32, u64) {
-    (event.record_id, event.pressing_id, event.number, event.purchase_price)
+): (ID, ID, u32, u64, u64) {
+    (
+        event.record_id,
+        event.pressing_id,
+        event.number,
+        event.purchase_price,
+        event.purchased_at_ms,
+    )
 }

@@ -40,8 +40,9 @@ fun creation_event_identifies_the_new_edition() {
     let (p, p_cap) = pressing::new(&mut rel, &rel_cap, 1, 12);
     let mut events = event::events_by_type<pressing::PressingCreatedEvent>();
     assert_eq!(events.length(), 1);
-    let (pid, rid, edition, max) = pressing::created_event_fields(&events.pop_back());
+    let (pid, cap_id, rid, edition, max) = pressing::created_event_fields(&events.pop_back());
     assert_eq!(pid, object::id(&p));
+    assert_eq!(cap_id, object::id(&p_cap));
     assert_eq!(rid, rel_id);
     assert_eq!(edition, 1);
     assert_eq!(max, 12);
@@ -136,12 +137,14 @@ fun purchase_event_is_separated_by_currency_type() {
     let mut ee = event::events_by_type<pressing::RecordPurchasedEvent<Distributor, EUR>>();
     assert_eq!(ue.length(), 1);
     assert_eq!(ee.length(), 1);
-    let (_, _, number, price) = pressing::purchased_event_fields(&ue.pop_back());
+    let (_, _, number, price, purchased_at_ms) = pressing::purchased_event_fields(&ue.pop_back());
     assert_eq!(number, 1);
     assert_eq!(price, 5);
-    let (_, _, number, price) = pressing::purchased_event_fields(&ee.pop_back());
+    assert_eq!(purchased_at_ms, PURCHASED_AT_MS);
+    let (_, _, number, price, purchased_at_ms) = pressing::purchased_event_fields(&ee.pop_back());
     assert_eq!(number, 2);
     assert_eq!(price, 7);
+    assert_eq!(purchased_at_ms, PURCHASED_AT_MS);
     usd.destroy();
     eur.destroy();
     destroy(p);
@@ -160,7 +163,7 @@ fun capped_supply_is_lifetime_supply_after_destruction() {
     assert_eq!(second.number(), 2);
     let events = event::events_by_type<pressing::RecordPurchasedEvent<Distributor, USD>>();
     assert_eq!(events.length(), 2);
-    let (_, _, number, _) = pressing::purchased_event_fields(&events[1]);
+    let (_, _, number, _, _) = pressing::purchased_event_fields(&events[1]);
     assert_eq!(number, 2);
     second.destroy();
     destroy(p);
