@@ -13,7 +13,7 @@ module record::pressing;
 
 use std::type_name::{Self, TypeName};
 use sui::{clock::Clock, derived_object, event::emit, vec_set::{Self, VecSet}};
-use musicos::release::{Release, ReleaseAdminCap};
+use miso_music::release::{Release, ReleaseAdminCap};
 use record::record::{Self, Record};
 
 // === Errors ===

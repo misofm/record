@@ -6,7 +6,7 @@ module record::pressing_event_tests;
 
 use std::{bcs, type_name, unit_test::{assert_eq, destroy}};
 use sui::{clock, event, test_scenario as ts};
-use musicos::release::{Self, Release, ReleaseAdminCap};
+use miso_music::release::{Self, Release, ReleaseAdminCap};
 use record::{pressing::{Self, Pressing}, record::{Self, Record}};
 
 const PURCHASED_AT_MS: u64 = 1_726_000_123;
