@@ -20,7 +20,7 @@ A `Pressing` is one numbered edition of a Release, derived from the Release UID 
 
 **R-02 · Info · Accepted — Destroying a Record orphans its dynamic fields and never frees its number.** `record::destroy` deletes the UID without checking for children (`record.move:34-39`); fields added via `uid_mut` become unreachable. The `Claimed(id)` marker stays on the Pressing forever (`derived_object::claim` never removes it), so storage per pressed number is permanent and `supply` is lifetime issuance, as the README states.
 
-**R-03 · Info · Accepted — `RecordPurchasedEvent` omits `release_id` and `edition`.** Indexers join on `pressing_id` to `PressingCreatedEvent` (`pressing.move:60-67,138-144`). The README documents the join; events were deliberately slimmed.
+**R-03 · Info · Accepted — `RecordPurchasedEvent` omits `release_id` and `edition`.** Indexers join on `pressing_id` to `PressingCreatedEvent` (`pressing.move:60-66,138-144`). The README documents the join; events were deliberately slimmed.
 
 No Open findings of Low severity or higher.
 
