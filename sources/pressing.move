@@ -71,47 +71,6 @@ public use fun pressing_admin_cap_pressing_id as PressingAdminCap.pressing_id;
 
 // === Public Functions ===
 
-public fun new(
-    release: &mut Release,
-    release_cap: &ReleaseAdminCap,
-    edition: u16,
-    max_supply: u32,
-): (Pressing, PressingAdminCap) {
-    assert!(edition > 0, EInvalidEdition);
-    assert!(max_supply > 0, EInvalidMaxSupply);
-
-    let release_id = object::id(release);
-    let release_uid = release.uid_mut(release_cap);
-    assert!(
-        edition == 1 || derived_object::exists(release_uid, PressingKey(edition - 1)),
-        EPreviousEditionMissing,
-    );
-    let mut id = derived_object::claim(release_uid, PressingKey(edition));
-    let pressing_id = id.to_inner();
-    let admin_cap = PressingAdminCap {
-        id: derived_object::claim(&mut id, PressingAdminCapKey()),
-        pressing_id,
-    };
-
-    emit(PressingCreatedEvent {
-        pressing_id,
-        admin_cap_id: object::id(&admin_cap),
-        release_id,
-        edition,
-        max_supply,
-    });
-
-    let pressing = Pressing {
-        id,
-        release_id,
-        edition,
-        supply: 0,
-        max_supply,
-        distributors: vec_set::empty(),
-    };
-    (pressing, admin_cap)
-}
-
 public fun share(self: Pressing) {
     transfer::share_object(self);
 }
@@ -188,6 +147,47 @@ public fun derive_admin_cap_address(pressing_id: ID): address {
 }
 
 // === Admin Functions ===
+
+public fun new(
+    release: &mut Release,
+    release_cap: &ReleaseAdminCap,
+    edition: u16,
+    max_supply: u32,
+): (Pressing, PressingAdminCap) {
+    assert!(edition > 0, EInvalidEdition);
+    assert!(max_supply > 0, EInvalidMaxSupply);
+
+    let release_id = object::id(release);
+    let release_uid = release.uid_mut(release_cap);
+    assert!(
+        edition == 1 || derived_object::exists(release_uid, PressingKey(edition - 1)),
+        EPreviousEditionMissing,
+    );
+    let mut id = derived_object::claim(release_uid, PressingKey(edition));
+    let pressing_id = id.to_inner();
+    let admin_cap = PressingAdminCap {
+        id: derived_object::claim(&mut id, PressingAdminCapKey()),
+        pressing_id,
+    };
+
+    emit(PressingCreatedEvent {
+        pressing_id,
+        admin_cap_id: object::id(&admin_cap),
+        release_id,
+        edition,
+        max_supply,
+    });
+
+    let pressing = Pressing {
+        id,
+        release_id,
+        edition,
+        supply: 0,
+        max_supply,
+        distributors: vec_set::empty(),
+    };
+    (pressing, admin_cap)
+}
 
 public fun authorize_distributor<Distributor: drop>(
     self: &mut Pressing,
