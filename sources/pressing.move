@@ -65,6 +65,10 @@ public struct RecordPurchasedEvent<phantom Distributor, phantom Currency> has co
     purchased_at_ms: u64,
 }
 
+// === Method Aliases ===
+
+public use fun pressing_admin_cap_pressing_id as PressingAdminCap.pressing_id;
+
 // === Public Functions ===
 
 public fun new(
@@ -167,20 +171,20 @@ public fun is_distributor_authorized<Distributor: drop>(self: &Pressing): bool {
     self.distributors.contains(&type_name::with_defining_ids<Distributor>())
 }
 
-public fun pressing_id(cap: &PressingAdminCap): ID {
-    cap.pressing_id
-}
-
 public fun derive_address(release_id: ID, edition: u16): address {
     derived_object::derive_address(release_id, PressingKey(edition))
 }
 
-public fun derive_admin_cap_address(pressing_id: ID): address {
-    derived_object::derive_address(pressing_id, PressingAdminCapKey())
-}
-
 public fun uid(self: &Pressing): &UID {
     &self.id
+}
+
+public fun pressing_admin_cap_pressing_id(cap: &PressingAdminCap): ID {
+    cap.pressing_id
+}
+
+public fun derive_admin_cap_address(pressing_id: ID): address {
+    derived_object::derive_address(pressing_id, PressingAdminCapKey())
 }
 
 // === Admin Functions ===
