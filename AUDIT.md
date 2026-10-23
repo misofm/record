@@ -11,7 +11,7 @@ A `Pressing` is one numbered edition of a Release, derived from the Release UID 
 - **Release admin** (`&mut Release` + matching `ReleaseAdminCap`): creates Pressings for that Release, one per edition, in order (`pressing.move:74-113`). The Release cap is checked by `release::uid_mut` (`release.move:189`), not by this package.
 - **Pressing admin** (`PressingAdminCap`, `key + store`, derived once from the Pressing at `PressingAdminCapKey()`, `pressing.move:91-94`): authorizes and revokes Distributor types and gets `&mut UID` of the Pressing (`pressing.move:192-213`). Cannot change `edition`, `max_supply`, `supply`, or choose Record numbers.
 - **Distributor package**: any module that can construct an authorized witness type calls `press<Distributor, Currency>` on the shared Pressing and receives the Record (`pressing.move:119-146`). It alone decides `purchase_price` and the `Currency` type parameter; `record` does not see any payment.
-- **Record holder**: `Record` is `key + store`; any holder can transfer, wrap, share, freeze, `destroy`, and use `uid_mut` (`record.move:34-39,79-81`).
+- **Record holder**: `Record` is `key + store`; any holder can transfer, wrap, share, freeze, `destroy`, and use `uid_mut` (`record.move:34-43`).
 - **Nobody** can construct a `Record` outside `pressing::press` (`record::new` is `public(package)`, `record.move:85`), construct `RecordKey`/`PressingKey`/`PressingAdminCapKey` from another module, mint a second admin cap for a Pressing, re-use a Record number, delete a Pressing, or raise `max_supply`.
 
 ## Findings

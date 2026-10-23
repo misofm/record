@@ -38,6 +38,10 @@ public fun destroy(self: Record) {
     emit(RecordDestroyedEvent { record_id });
 }
 
+public fun uid_mut(self: &mut Record): &mut UID {
+    &mut self.id
+}
+
 // === View Functions ===
 
 public fun release_id(self: &Record): ID {
@@ -74,10 +78,6 @@ public fun derive_address(pressing_id: ID, number: u32): address {
 
 public fun uid(self: &Record): &UID {
     &self.id
-}
-
-public fun uid_mut(self: &mut Record): &mut UID {
-    &mut self.id
 }
 
 // === Private Functions ===
