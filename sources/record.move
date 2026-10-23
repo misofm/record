@@ -80,7 +80,7 @@ public fun uid(self: &Record): &UID {
     &self.id
 }
 
-// === Private Functions ===
+// === Package Functions ===
 
 public(package) fun new<Currency>(
     pressing_uid: &mut UID,
