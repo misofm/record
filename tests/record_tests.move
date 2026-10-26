@@ -276,10 +276,10 @@ fun release_derives_one_pressing_per_edition() {
 
     let created = event::events_by_type<pressing::PressingCreatedEvent>();
     assert_eq!(created.length(), 2);
-    let (pressing_id, admin_cap_id, event_release_id, edition, max_supply) =
+    let (pressing_id, pressing_admin_cap_id, event_release_id, edition, max_supply) =
         pressing::created_event_fields(&created[1]);
     assert_eq!(pressing_id, object::id(&second));
-    assert_eq!(admin_cap_id, object::id(&second_cap));
+    assert_eq!(pressing_admin_cap_id, object::id(&second_cap));
     assert_eq!(event_release_id, release_id);
     assert_eq!(edition, 2);
     assert_eq!(max_supply, 500);

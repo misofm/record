@@ -43,7 +43,7 @@ public struct PressingAdminCapKey() has copy, drop, store;
 
 public struct PressingCreatedEvent has copy, drop {
     pressing_id: ID,
-    admin_cap_id: ID,
+    pressing_admin_cap_id: ID,
     release_id: ID,
     edition: u16,
     max_supply: u32,
@@ -172,7 +172,7 @@ public fun new(
 
     emit(PressingCreatedEvent {
         pressing_id,
-        admin_cap_id: object::id(&admin_cap),
+        pressing_admin_cap_id: object::id(&admin_cap),
         release_id,
         edition,
         max_supply,
@@ -257,7 +257,13 @@ public fun foreign_admin_cap_for_testing(pressing_id: ID, ctx: &mut TxContext): 
 
 #[test_only]
 public fun created_event_fields(event: &PressingCreatedEvent): (ID, ID, ID, u16, u32) {
-    (event.pressing_id, event.admin_cap_id, event.release_id, event.edition, event.max_supply)
+    (
+        event.pressing_id,
+        event.pressing_admin_cap_id,
+        event.release_id,
+        event.edition,
+        event.max_supply,
+    )
 }
 
 #[test_only]

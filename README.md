@@ -173,7 +173,7 @@ under Sui's 250 KiB per-event limit.
 
 | Event | Fields | Bytes |
 |---|---|---|
-| `PressingCreatedEvent` | `pressing_id`, `admin_cap_id`, `release_id`, `edition`, `max_supply` | 102 |
+| `PressingCreatedEvent` | `pressing_id`, `pressing_admin_cap_id`, `release_id`, `edition`, `max_supply` | 102 |
 | `PressingDistributorAuthorizedEvent<Distributor>` | `pressing_id` | 32 |
 | `PressingDistributorRevokedEvent<Distributor>` | `pressing_id` | 32 |
 | `RecordPurchasedEvent<Distributor, Currency>` | `record_id`, `pressing_id`, `number`, `purchase_price`, `purchased_at_ms` | 84 |
