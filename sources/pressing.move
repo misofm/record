@@ -83,7 +83,6 @@ public fun press<Distributor: drop, Currency>(
 ): Record {
     assert!(self.is_distributor_authorized<Distributor>(), EDistributorNotAuthorized);
     assert!(self.supply < self.max_supply, EMaxSupplyReached);
-
     self.supply = self.supply + 1;
     let number = self.supply;
     let record = record::new<Currency>(
@@ -156,7 +155,6 @@ public fun new(
 ): (Pressing, PressingAdminCap) {
     assert!(edition > 0, EInvalidEdition);
     assert!(max_supply > 0, EInvalidMaxSupply);
-
     let release_id = object::id(release);
     let release_uid = release.uid_mut(release_cap);
     assert!(
@@ -176,7 +174,6 @@ public fun new(
         edition,
         max_supply,
     });
-
     let pressing = Pressing {
         id,
         release_id,

@@ -66,7 +66,6 @@ fun sharing_is_silent_and_preserves_config_and_supply() {
     p.share();
     assert_eq!(event::num_events(), event_count);
     destroy(cap);
-
     scenario.next_tx(@0xB);
     let p = scenario.take_shared<Pressing>();
     assert_eq!(object::id(&p), p_id);
@@ -87,7 +86,6 @@ fun distributor_events_capture_only_real_set_changes() {
     p.authorize_distributor<Distributor>(&cap);
     p.revoke_distributor<Distributor>(&cap);
     p.revoke_distributor<Distributor>(&cap);
-
     let a = event::events_by_type<pressing::PressingDistributorAuthorizedEvent<Distributor>>();
     let r = event::events_by_type<pressing::PressingDistributorRevokedEvent<Distributor>>();
     assert_eq!(a.length(), 1);
