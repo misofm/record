@@ -63,7 +63,6 @@ fun authorized_distributor_presses_a_self_describing_extensible_record() {
     pressing.authorize_distributor<DemoDistributor>(&admin_cap);
     let pressing_id = object::id(&pressing);
     let purchase_price = 25;
-
     let mut r = press_record(&mut pressing, demo_distributor(), purchase_price);
 
     assert_eq!(r.release_id(), release_id);
@@ -369,7 +368,6 @@ fun record_supports_framework_public_transfer() {
     let received = scenario.take_from_sender<Record>();
     assert_eq!(object::id(&received), record_id);
     received.destroy();
-
     scenario.end();
 }
 

@@ -169,7 +169,6 @@ public fun new(
         id: derived_object::claim(&mut id, PressingAdminCapKey()),
         pressing_id,
     };
-
     emit(PressingCreatedEvent {
         pressing_id,
         pressing_admin_cap_id: object::id(&admin_cap),

@@ -12,7 +12,9 @@ use record::{pressing::{Self, Pressing}, record::{Self, Record}};
 const PURCHASED_AT_MS: u64 = 1_726_000_123;
 
 public struct Distributor() has drop;
+
 public struct USD() has drop;
+
 public struct EUR() has drop;
 
 fun id(a: address): ID {
