@@ -1,4 +1,4 @@
-> **Moved.** This repository is archived. Its packages now live in [`misofm/framework`](https://github.com/misofm/framework/tree/main/record/record) under `record/record/`.
+> **Moved.** This repository is archived. Its package now lives in [`misofm/framework`](https://github.com/misofm/framework/tree/main/record) under `record/`.
 
 # miso-record
 
