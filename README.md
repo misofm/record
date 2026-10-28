@@ -1,3 +1,5 @@
+> **Moved.** This repository is archived. Its packages now live in [`misofm/framework`](https://github.com/misofm/framework/tree/main/record/record) under `record/record/`.
+
 # miso-record
 
 The Miso Record package owns the complete Record lifecycle on Sui. A `Pressing` is
